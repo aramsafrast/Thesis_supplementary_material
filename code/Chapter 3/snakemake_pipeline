@@ -1,0 +1,105 @@
+rule all:
+	"""
+	Main outputs of the workflow
+        """
+	input:
+                "markdown_results/fig3_3_7.html",
+                "markdown_results/fig3_4_5_10_12.html",
+                "markdown_results/fig3_8.html",
+                "markdown_results/fig3_9_11.html",
+                "markdown_results/fig3_2.html"
+
+rule cfrna_input:
+        output:
+                "markdown_results/cfrna_input_clean.html"
+        script:
+                "cfrna_input_clean.Rmd"
+
+rule cfrna_wgcna:
+        input:
+                "markdown_results/cfrna_input_clean.html"
+        output:
+                "markdown_results/cf_wgcna_suppl_file2.html"
+        threads: workflow.cores
+        script:
+                "cf_wgcna_suppl_file2.Rmd"
+
+rule exorna_input:
+        output:
+                "markdown_results/exorna_input_clean.html"
+        script:
+                "exorna_input_clean.Rmd"
+
+rule exorna_wgcna:
+        input:
+                "markdown_results/exorna_input_clean.html"
+        output:
+                "markdown_results/exo_wgcna_suppl_file3.html"
+        threads: workflow.cores
+        script:
+                "exo_wgcna_suppl_file3.Rmd"
+
+rule metacells:
+        output:
+                "markdown_results/metacell_construct_fig2_2.html"
+        script:
+                "metacell_construct_fig2_2.Rmd"
+
+rule module_pres_sc:
+        input:
+                "markdown_results/cf_wgcna_suppl_file2.html",
+                "markdown_results/exo_wgcna_suppl_file3.html",
+                "markdown_results/metacell_construct_fig2_2.html"
+        output:
+                "markdown_results/mp_sc.html"
+        threads: workflow.cores
+        script:
+                "mp_sc.Rmd"
+
+rule fig3_3_7:
+        input:
+                "markdown_results/cfrna_input_clean.html"
+        output:
+                "markdown_results/fig3_3_7.html"
+        script:
+                "fig3_3_7.Rmd"
+
+rule fig3_4_5_10_12:
+        input:  "markdown_results/cf_wgcna_suppl_file2.html",
+                "markdown_results/exo_wgcna_suppl_file3.html"
+        output:
+                "markdown_results/fig3_4_5_10_12.html"
+        script:
+                "fig3_4_5_10_12.Rmd"
+
+rule fig3_8:
+        input:
+                "markdown_results/cf_wgcna_suppl_file2.html",
+                "markdown_results/exo_wgcna_suppl_file3.html"
+        output:
+                "markdown_results/fig3_8.html"
+        threads: workflow.cores
+        script:
+                "fig3_8.Rmd"
+
+rule fig3_9_11:
+        input:
+                "markdown_results/cf_wgcna_suppl_file2.html",
+                "markdown_results/exo_wgcna_suppl_file3.html",
+                "markdown_results/mp_sc.html"
+        output:
+                "markdown_results/fig3_9_11.html"
+        script:
+                "fig3_9_11.Rmd"
+
+rule fig3_2:
+        input:
+                "markdown_results/cf_wgcna_suppl_file2.html",
+                "markdown_results/exo_wgcna_suppl_file3.html"
+        output:
+                "markdown_results/fig3_2.html"
+        script:
+                "fig3_2.Rmd"
+
+
+

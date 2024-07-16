@@ -1,0 +1,163 @@
+---
+title: "Generation of main Figure 3.9 & 3.11"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r global_options, echo = F}
+knitr::opts_chunk$set(fig.path = "markdown_results/")
+```
+
+# load libraries
+***
+
+```{r libraries, message=F, warning=F}
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(ReactomePA)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(ragg)
+library(AnnotationDbi)
+library(enrichplot)
+library(tidyr)
+library(Seurat)
+library(ggtext)
+library(DOSE)
+```
+
+# Generation of Figure 3.9
+***
+
+```{r fig3_9, message=FALSE, warning=FALSE, fig.height=8}
+# load cell specific presevration staistics
+load("./scrna/results/cf_mp/Portal endothelial cells_statsZ.RData")
+port <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Cholangiocytes_statsZ.RData")
+chl <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Hepatocytes_statsZ.RData")
+hepato <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/LSECs_statsZ.RData")
+lsec <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Macrophages_statsZ.RData")
+macro <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Mature B cells_statsZ.RData")
+b <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/NK-like cells_statsZ.RData")
+nk <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/T cells_statsZ.RData")
+t <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Plasma cells_statsZ.RData")
+pl <- statsZ_all$Zsummary.pres
+load("./scrna/results/cf_mp/Erythroid cells_statsZ.RData")
+er <- statsZ_all$Zsummary.pres
+# merge, clean and plot the data
+cfmp_df <- data.frame(module = rownames(statsZ_all), Portal = port, Hepatocytes = hepato, LSECs = lsec, Macrophages = macro, b_cells = b, t_cells = t, NK_cells = nk, Erythroid = er, Cholangiocytes = chl, Plasma_cells = pl)
+# cfmp_df$module<-paste0("cf-", "", cfmp_df$module)
+rownames(cfmp_df) <- cfmp_df$module
+cfmp_df <- cfmp_df %>%
+  filter(!module %in% c("gold", "grey")) %>%
+  dplyr::select(-module)
+cfmp_df$modules <- rownames(cfmp_df)
+cfmp_long <- cfmp_df %>%
+  pivot_longer(!modules, names_to = "cell", values_to = "value")
+cfmp_long$cell <- recode(cfmp_long$cell, t_cells = "T cells", "NK_cells" = "NK-like cells", Erythroid = "Erythroid cells", b_cells = "Mature B cells", Plasma_cells = "Plasma cells", Portal = "Portal endothelial cells")
+# plot
+cf_heatmap <- ggplot(cfmp_long, aes(x = cell, y = modules)) +
+  geom_tile(color = "black", aes(fill = ifelse(value < 2, NA, ifelse(value > 10, "above 10", "below 10"))), size = 0.2) +
+  theme_classic(base_size = 24) +
+  scale_fill_manual(values = c("above 10" = "lightblue4", "below 10" = "lightblue"), labels = c("strong", "weak to moderate"), na.value = "grey95", name = expression(Z[italic("pres")])) +
+  labs(x = "", y = "", fill = "cor") +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0), position = "left") +
+  theme(
+    legend.position = "right",
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "black", color = NA),
+    legend.key.size = unit(1, "cm"),
+    legend.key.width = unit(1, "cm"),
+    plot.title = element_text(color = "black", size = 26, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "black", size = 25, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1)
+  )
+# export plot
+ggsave(plot = cf_heatmap, file = "./figures/fig3_9.png", units = "mm", device = ragg::agg_png, height = 250, width = 400, scaling = 1, limitsize = FALSE)
+```
+
+# Generation of Figure 3.11
+***
+
+```{r fig3_11, message=FALSE, warning=FALSE, fig.height=8}
+# load cell specific presevration staistics
+load("./scrna/results/exo_mp/Portal endothelial cells_statsZ.RData")
+port <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Cholangiocytes_statsZ.RData")
+chl <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Hepatocytes_statsZ.RData")
+hepato <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/LSECs_statsZ.RData")
+lsec <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Macrophages_statsZ.RData")
+macro <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Mature B cells_statsZ.RData")
+b <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/NK-like cells_statsZ.RData")
+nk <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/T cells_statsZ.RData")
+t <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Plasma cells_statsZ.RData")
+p <- statsZ_all$Zsummary.pres
+load("./scrna/results/exo_mp/Erythroid cells_statsZ.RData")
+e <- statsZ_all$Zsummary.pres
+# merge, clean and plot the data
+exomp_df <- data.frame(module = rownames(statsZ_all), Portal = port, Hepatocytes = hepato, LSECs = lsec, Macrophages = macro, b_cells = b, t_cells = t, NK_cells = nk, Erythroid = e, Cholangiocytes = chl, Plasma_cells = p)
+# exomp_df$module<-paste0("exo-", "", exomp_df$module)
+rownames(exomp_df) <- exomp_df$module
+exomp_df <- exomp_df %>%
+  filter(!module %in% c("gold", "grey")) %>%
+  dplyr::select(-module)
+exomp_df$modules <- rownames(exomp_df)
+exomp_long <- exomp_df %>%
+  pivot_longer(!modules, names_to = "cell", values_to = "value")
+exomp_long$cell <- dplyr::recode(exomp_long$cell, t_cells = "T cells", "NK_cells" = "NK-like cells", Erythroid = "Erythroid cells", b_cells = "Mature B cells", Plasma_cells = "Plasma cells", Portal = "Portal endothelial cells")
+# plot
+exo_heatmap <- ggplot(exomp_long, aes(x = cell, y = modules)) +
+  geom_tile(color = "black", aes(fill = ifelse(value < 2, NA, ifelse(value > 10, "above 10", "below 10"))), size = 0.2) +
+  theme_classic(base_size = 24) +
+  scale_fill_manual(values = c("above 10" = "lightblue4", "below 10" = "lightblue"), labels = c("strong", "weak to moderate"), na.value = "grey95", name = expression(Z[italic("pres")])) +
+  labs(x = "", y = "", fill = "cor") +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0), position = "left") +
+  theme(
+    legend.position = "right",
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "black", color = NA),
+    legend.key.size = unit(1, "cm"),
+    legend.key.width = unit(1, "cm"),
+    plot.title = element_text(color = "black", size = 26, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "black", size = 25, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1)
+  )
+# export plot
+ggsave(plot = exo_heatmap, file = "./figures/fig3_11.png", units = "mm", device = ragg::agg_png, height = 250, width = 400, scaling = 1, limitsize = FALSE)
+```
+
+```{r}
+sessionInfo()
+```

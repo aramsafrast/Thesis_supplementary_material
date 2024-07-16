@@ -1,0 +1,240 @@
+---
+title: "Suppl. tables 1, 5 & 6"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries
+library(tidyverse)
+library(readr)
+library(rstatix)
+library(DescTools)
+library(DT)
+library(openxlsx)
+library(glmnet)
+library(readxl)
+```
+
+```{r setup, include=FALSE}
+theme_set(theme_classic(base_size = 18))
+```
+
+# Suppl. Table 1
+
+```{r, tables1, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/deconv_res_filt.RData")
+# data cleanup
+## add additional npj metadata from the article; already provided
+npj_meta_add <- read_excel("./data/41698_2022_270_MOESM1_ESM.xlsx")
+npj_meta_keys <- read_excel("./data/npj_keys.xlsx", col_names = FALSE)
+colnames(npj_meta_keys) <- c("samples", "seq_id")
+npj_meta_add_joined <- npj_meta_add %>%
+  inner_join(., npj_meta_keys, by = c("SeqID" = "seq_id"))
+npj_meta <- npj_meta_deconv %>%
+  rownames_to_column(var = "sample_id") %>%
+  inner_join(., npj_meta_add_joined, by = c("Sample.Name" = "samples"))
+npj_table <- npj_meta %>%
+  dplyr::select(sample_id, Group, Age.x, Stage, Etiology, Race, Set) %>%
+  dplyr::rename(Age = Age.x) %>%
+  dplyr::mutate(LC_type = "HCC")
+
+# the rest of the datasets; for elife + therano the source is Chen et al. https://doi.org/10.7554/eLife.75181
+elife_table <- data.frame(Feature = c("Stage", "A", "B", "C", "Unknown", c("Size", "<= 3 cm", "> 3 cm"), c("AFP", "<= 400ng/ml", "> 400ng/ml"), c("LC_type", "HCC", "ICC")), Number = c("", 14, 2, 6, 5, "", 1, 26, "", 21, 6, "", 19, 8))
+therano_table <- data.frame(Feature = c("Stage", "0", "A", "B", "C", c("Size", "<= 3 cm", "> 3 cm"), c("AFP", "<= 400ng/ml", "> 400ng/ml"), c("LC_type", "HCC", "HCC-ICC")), Number = c("", 4, 26, 4, 1, "", 11, 24, "", 28, 7, "", 33, 2))
+therano_meta <- therano_meta_deconv %>%
+  dplyr::select(samples, disease_state, gender, age, Stage)
+therano_elife_table <- data.frame(Chronic_Hepatitis_B_history = c("Yes", "No", "Others"), Number = c(37, 22, 3))
+frontiers_table <- frontiers_meta_deconv %>%
+  dplyr::select(Tissue, id, `HBV/HCV`, `NAFLD/NASH`, Grade, cirrhosis, `stage BCLC`, `stage AJCC`, `tumor size cm`, bleed, Race, Age.y, Gender) %>%
+  dplyr::mutate(LC_type = "HCC") %>%
+  rownames_to_column(var = "samples") %>%
+  dplyr::rename(Age = Age.y)
+# aggregate
+list_of_datasets <- list("Roskams-Hieter et al." = npj_table, "Chen et al." = elife_table, "Zhu et al." = therano_meta, "Zhu et al. (summary)" = therano_table, "Chen et al. & Zhu et al." = therano_elife_table, "Block et al." = frontiers_table)
+# export
+dir.create("./tables/")
+write.xlsx(list_of_datasets, file = "./tables/Supplementary File 1 - Liver Cancer Dataset Metadata.xlsx")
+```
+
+# Suppl. Table 5
+
+```{r, table5, fig.width= 15, fig.height=8, warning = FALSE}
+# laod data
+load("./data/ev_stat.RData")
+load("./data/hepato_test.RData")
+load("./data/age_stat.RData")
+# data cleanup
+ev_stat$group1 <- "plasma"
+ev_stat <- ev_stat %>%
+  dplyr::select(-.y.)
+ev_effect <- ev_effect %>%
+  dplyr::select(4, c(7:9))
+ev_all <- t(cbind(ev_stat, ev_effect)) %>%
+  as.data.frame() %>%
+  dplyr::rename("value" = V1) %>%
+  rownames_to_column(var = "feature")
+stat.test$variable2 <- "full"
+stat.test1$variable2 <- "mis"
+stat.test2$variable2 <- "full"
+stat.test3$variable2 <- "mis"
+
+# data aggregation
+table1 <- rbind(stat.test, stat.test1) %>%
+  dplyr::inner_join(., rbind(stat.test_effect, stat.test_effect1)) %>%
+  dplyr::rename(variable1 = "gender")
+table2 <- rbind(stat.test2, stat.test3) %>%
+  dplyr::inner_join(., rbind(stat.test_effect2, stat.test_effect3)) %>%
+  dplyr::rename(variable1 = "cond")
+table_join <- rbind(table1, table2)
+table3 <- stat.test4 %>%
+  dplyr::inner_join(., stat.test_effect4) %>%
+  dplyr::rename(variable1 = "gender") %>%
+  dplyr::rename(variable2 = "cond")
+table_full <- rbind(table_join, table3) %>% dplyr::select(variable1, variable2, colnames(table_join[c(2:8, 10:13)]))
+levels(hepato_stat$dataset) <- c("Roskams-Hieter et al. (2022)", "Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)")
+hepato_stat <- hepato_stat %>%
+  dplyr::select(-c(11:15))
+levels(hepato_effect$dataset) <- c("Roskams-Hieter et al. (2022)", "Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)")
+# export
+list_of_datasets <- list("Hepatocyte proportion testing" = hepato_stat, "Hepatocyte prop. effect size" = hepato_effect, "Plasma_EV test & effect size" = ev_all, "Confounder influence" = table_full)
+write.xlsx(list_of_datasets, file = "./tables/Supplementary File 5 - Statistical Analysis.xlsx")
+```
+
+# Suppl. Table 6
+
+```{r, table6, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/deconv_logmodel.RData")
+load("./data/cfdeconv_res.RData")
+load("./data/marker_res.RData")
+load("./data/int_res.RData")
+load("./data/hepato_res.RData")
+# remove replicates
+cfdeconv_log <- cfdeconv_log %>% dplyr::filter(dataset != "Total")
+elife_mark_rf <- elife_mark_rf %>% dplyr::filter(dataset != "Total")
+npj_mark_rf <- npj_mark_rf %>% dplyr::filter(dataset != "Total")
+all_mark_rf <- all_mark_rf %>% dplyr::filter(dataset != "Total")
+# data cleanup
+cfdeconv_log <- deconv_npj %>%
+  dplyr::mutate(dataset = rep("Roskams-Hieter et al. (2022)", 58)) %>%
+  rbind(., cfdeconv_log)
+npj_mark_rf <- npj_npj %>%
+  dplyr::mutate(dataset = rep("Roskams-Hieter et al. (2022)", 58)) %>%
+  rbind(., npj_mark_rf)
+elife_mark_rf <- elife_npj %>%
+  dplyr::mutate(dataset = rep("Roskams-Hieter et al. (2022)", 58)) %>%
+  rbind(., elife_mark_rf)
+all_mark_rf <- comb_npj %>%
+  dplyr::mutate(dataset = rep("Roskams-Hieter et al. (2022)", 58)) %>%
+  rbind(., all_mark_rf)
+int_roc <- int_npj %>%
+  dplyr::mutate(dataset = rep("Roskams-Hieter et al. (2022)", 58)) %>%
+  rbind(., int_roc)
+
+## logistic model results standardization
+cfdeconv_log_sum <- cfdeconv_log %>%
+  dplyr::mutate(correct = ifelse(resp == pred_class, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, resp) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = resp) %>%
+  dplyr::mutate(observed = ifelse(observed == 0, "HD", "LC")) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted))
+
+## rf model results standardization
+elife_mark_rf_sum <- elife_mark_rf %>%
+  dplyr::mutate(correct = ifelse(resp == pred_class, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, resp) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = resp) %>%
+  dplyr::mutate(observed = ifelse(observed == 0, "HD", "LC")) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted))
+npj_mark_rf_sum <- npj_mark_rf %>%
+  dplyr::mutate(correct = ifelse(resp == pred_class, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, resp) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = resp) %>%
+  dplyr::mutate(observed = ifelse(observed == 0, "HD", "LC")) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted))
+all_mark_rf_sum <- all_mark_rf %>%
+  dplyr::mutate(correct = ifelse(resp == pred_class, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, resp) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = resp) %>%
+  dplyr::mutate(observed = ifelse(observed == 0, "HD", "LC")) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted))
+int_rf_sum <- int_roc %>%
+  dplyr::mutate(correct = ifelse(resp == pred_class, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, resp) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = resp) %>%
+  dplyr::mutate(observed = ifelse(observed == 0, "HD", "LC")) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted))
+# hepatocyte proportion cut-off result standardization
+hepato_sum <- hepato %>%
+  dplyr::mutate(correct = ifelse(cond == pred, "yes", "no")) %>%
+  dplyr::group_by(dataset, correct, cond) %>%
+  summarize(count = n()) %>%
+  dplyr::rename(observed = cond) %>%
+  dplyr::rename(predicted = correct) %>%
+  relocate(predicted, .after = observed) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "HD", "LC", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "no" & observed == "LC", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "HD", "HD", predicted)) %>%
+  dplyr::mutate(predicted = ifelse(predicted == "yes" & observed == "LC", "LC", predicted)) %>%
+  ungroup()
+levels(hepato_sum$dataset) <- c("Roskams-Hieter et al. (2022)", "Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)")
+# also get the logistic model coefficients
+coefs <- as.matrix(coef(elnet_npj)) %>%
+  as.data.frame() %>%
+  dplyr::rename(coefficient = s0) %>%
+  rownames_to_column(var = "features")
+# export data
+list_of_datasets <- list("targeted deconv. log. regr." = cfdeconv_log_sum, "Chen et al. markers rf" = elife_mark_rf_sum, "Roskams-Hieter etal markers rf" = npj_mark_rf_sum, "comb. markers rf" = all_mark_rf_sum, "integrated mod. rf" = int_rf_sum, "hepato. cut-off" = hepato_sum, "coeff. of targeted deconv" = coefs)
+write.xlsx(list_of_datasets, file = "./tables/Supplementary File 6 - Modeling Results.xlsx")
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,41 @@
+name: cflri_lc
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-tidyverse
+  - r-base=4.1.2
+  - bioconductor-singler=1.8.0
+  - bioconductor-scran
+  - r-pheatmap
+  - r-upsetr=1.4.0
+  - r-ggvenn=0.1.10
+  - r-cowplot
+  - r-circlize
+  - r-magick
+  - r-igraph=1.3.1
+  - r-ggraph=2.1.0
+  - r-gtools
+  - bioconductor-complexheatmap
+  - r-ggpubr
+  - bioconductor-biomart=2.50.0
+  - bioconductor-singlecellsignalr
+  - r-readxl
+  - r-patchwork
+  - r-seurat=4.1.0
+  - bioconductor-biobase
+  - r-ggrepel
+  - r-viridis
+  - r-scales
+  - r-ggcorrplot
+  - r-dt
+  - r-desctools
+  - r-ggfortify
+  - r-openxlsx
+  - snakemake
+  - r-devtools=2.4.3
+  - r-coin
+  - matrix.utils
+  - r-seuratobject
+  - r-janitor

@@ -1,0 +1,442 @@
+---
+title: "External markers/models"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries
+devtools::install_github("aramsafrast/cvms")
+library(randomForest)
+library(edgeR)
+library(tidyverse)
+library(caret)
+library(pROC)
+library(glmnet)
+library(readr)
+library(tidyverse)
+library(ggfortify)
+library(ggpubr)
+library(rstatix)
+library(DescTools)
+library(plotROC)
+library(cvms)
+library(patchwork)
+```
+
+```{r setup, include=FALSE}
+# set the plotting parameters
+theme_set(theme_classic(base_size = 18))
+cols <- c("Chen et al. (2022)" = "darkkhaki", "Zhu et al. (2021)" = "darkgoldenrod3", "Block et al. (2022)" = "darkmagenta", "Total" = "cornflowerblue")
+```
+
+# npj paper (Roskams-Hieter et al.) - 10 gene markers
+
+```{r, npj, warning = FALSE, fig.width= 15, fig.height=8}
+### from npj paper
+# load the data
+load("./data/cfinput_clean_filt.RData")
+# generate the list of markers
+gene_list <- c("FGB", "FGA", "CP", "C3", "IFITM3", "FGG", "ATP1B1", "HRG", "APOE", "DHCR24")
+# npj data prep - filter only those markers and combine with metadata
+select_datac <- which((row.names(npj_batch)) %in% (gene_list))
+data_npj <- cbind(npj_meta, t(npj_batch[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# elife data prep
+select_datac <- which((row.names(elife_countm_filt)) %in% (gene_list))
+data_elife <- cbind(elife_meta_filt, t(elife_countm_filt[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# therano data prep
+select_datac <- which((row.names(therano_countm)) %in% (gene_list))
+data_therano <- cbind(therano_meta, t(therano_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# frontiers data prep
+select_datac <- which((row.names(frontiers_countm)) %in% (gene_list))
+data_frontiers <- cbind(frontiers_meta, t(frontiers_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+```
+
+## npj paper (Roskams-Hieter et al.) - random forest model
+
+```{r, npj_rf, warning = FALSE, fig.width= 15, fig.height=8}
+## rf
+# determine optimal number of trees
+set.seed(5)
+repeat_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 5, savePredictions = TRUE, summaryFunction = twoClassSummary, classProbs = TRUE)
+forest <- caret::train(cond ~ ., data = data_npj, method = "rf", trControl = repeat_cv, metric = "ROC", tuneLength = 10)
+# optimal tune
+forest$bestTune
+
+# train a model
+set.seed(5)
+model_train <- randomForest(cond ~ ., data = data_npj, mtry = as.numeric(forest$bestTune))
+rf_npj_roc <- roc(data_npj$cond, model_train$votes[, 2], levels = c("HD", "LC"), direction = "<", plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, main = "ROC plot calculated with RF votes - used also for optimal cut-off calculation")
+# optimal threshold
+best_thr <- coords(rf_npj_roc, "best", best.method = "youden", best.weights = c(1, 0.5))
+pred_npj <- ifelse(model_train$votes[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on elife
+pd_elife <- predict(model_train, data_elife, type = "prob")
+roc_rf_elife <- roc(as.numeric(data_elife$cond == "LC"), as.numeric(pd_elife[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_elife <- ifelse(pd_elife[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on therano
+pd_therano <- predict(model_train, data_therano, type = "prob")
+roc_rf_therano <- roc(as.numeric(data_therano$cond == "LC"), as.numeric(pd_therano[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_therano <- ifelse(pd_therano[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on frontiers
+pd_front <- predict(model_train, data_frontiers, type = "prob")
+roc_rf_front <- roc(as.numeric(data_frontiers$cond == "LC"), as.numeric(pd_front[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_front <- ifelse(pd_front[, 2] < best_thr$threshold, "HD", "LC")
+
+# summarize model performance
+all_roc <- data.frame(resp = as.factor(c(data_elife$cond, data_therano$cond, data_frontiers$cond, c(data_elife$cond, data_therano$cond, data_frontiers$cond))), pred = c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2], c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2])), dataset = c(rep("Chen et al. (2022)", times = nrow(data_elife)), rep("Zhu et al. (2021)", nrow(data_therano)), rep("Block et al. (2022)", times = nrow(data_frontiers)), c(rep("Total", nrow(data_elife) + nrow(data_therano) + nrow(data_frontiers))))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+total_roc <- all_roc %>% dplyr::filter(dataset == "Total")
+roc_all <- roc(response = total_roc$resp, predictor = total_roc$pred, levels = c("0", "1"), direction = "<", plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE)
+# plot results
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 15), guide = guide_legend()) +
+  ggtitle("Roskams-Hieter et al. gene markers") +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2), conf_low = c(roc_rf_elife$ci[1], roc_rf_therano$ci[1], roc_rf_front$ci[1], roc_all$ci[1]), conf_high = c(roc_rf_elife$ci[3], roc_rf_therano$ci[3], roc_rf_front$ci[3], roc_all$ci[3])) %>% dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_errorbar(aes(x = dataset, ymin = conf_low, ymax = conf_high), width = 0.5, linewidth = 0.5, alpha = 1) +
+  geom_text(aes(label = AUC), nudge_y = -(b$AUC - b$conf_high - 0.07), color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+preds <- ifelse(all_roc$pred < best_thr$threshold, 0, 1)
+all_roc$pred_class <- as.character(c(pred_elife, pred_therano, pred_front))
+all_roc$resp <- as.character(ifelse(all_roc$resp == 0, "HD", "LC"))
+save_roc <- all_roc
+all_roc <- all_roc %>%
+  dplyr::filter(dataset != "Total") %>%
+  droplevels()
+eval <- evaluate(all_roc,
+  target_col = "resp",
+  prediction_cols = "pred_class",
+  type = "binomial"
+)
+# plot the confusion matrix
+conf_mat <- eval$`Confusion Matrix`[[1]]
+p2b <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = font(size = 9, color = "black"), font_col_percentages = font(size = 4.5, color = "black"), font_row_percentages = font(size = 4.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+pl1 <- ggarrange(p1, p2b, labels = "AUTO", hjust = -2, font.label = list(size = 18, family = "Helvetica")) + plot_annotation(title = "Performance of random forest model of Roskams-Hieter et al. (2022) gene markers", theme = theme(plot.title = element_text(size = 18, family = "Helvetica", face = "bold", hjust = 0.5), plot.subtitle = element_text(hjust = 0.5, face = "bold", family = "Helvetica", size = 14)))
+
+npj1 <- p1
+npj2 <- p2b
+
+# get the testing phase data for future use
+npj_npj <- data.frame(resp = as.factor(c(data_npj$cond)), pred_class = c(pred_npj), pred = model_train$votes[, 2]) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(pred_class = ifelse(pred_class == "LC", 1, 0))
+
+# model performance per condition and dataset
+save_roc$pred_class <- ifelse(save_roc$pred_class == "HD", "0", "1")
+save_roc$resp <- ifelse(save_roc$resp == "HD", "0", "1")
+save_roc %>%
+  dplyr::filter(resp != pred_class) %>%
+  dplyr::count(dataset, resp)
+npj_mark_rf <- save_roc
+```
+
+# elife paper (Chen et al.) - 5 gene markers
+
+```{r, elife, warning = FALSE, fig.width= 15, fig.height=8}
+### from elife paper
+gene_list <- c("TF", "HRG", "CP", "FGA", "GOLGA6L1")
+# npj data prep - filter only those markers and combine with metadata
+select_datac <- which((row.names(npj_batch)) %in% (gene_list))
+data_npj <- cbind(npj_meta, t(npj_batch[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# elife data prep
+select_datac <- which((row.names(elife_countm_filt)) %in% (gene_list))
+data_elife <- cbind(elife_meta_filt, t(elife_countm_filt[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# therano data prep
+select_datac <- which((row.names(therano_countm)) %in% (gene_list))
+data_therano <- cbind(therano_meta, t(therano_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# frontiers data prep
+select_datac <- which((row.names(frontiers_countm)) %in% (gene_list))
+data_frontiers <- cbind(frontiers_meta, t(frontiers_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+```
+
+## elife paper (Chen et al.) - random forest model
+
+```{r, elife_rf, warning = FALSE, fig.width= 15, fig.height=8}
+## rf
+# determine optimal number of trees
+set.seed(5)
+repeat_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 5, savePredictions = TRUE, summaryFunction = twoClassSummary, classProbs = TRUE)
+forest <- caret::train(cond ~ ., data = data_npj, method = "rf", trControl = repeat_cv, metric = "ROC", tuneLength = 10)
+# optimal tune
+forest$bestTune
+
+# train a model
+set.seed(5)
+model_train <- randomForest(cond ~ ., data = data_npj, mtry = as.numeric(forest$bestTune))
+rf_npj_roc <- roc(data_npj$cond, model_train$votes[, 2], levels = c("HD", "LC"), direction = "<", plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, main = "ROC plot calculated with RF votes - used also for optimal cut-off calculation")
+# optimal threshold
+best_thr <- coords(rf_npj_roc, "best", best.method = "youden", best.weights = c(1, 0.5))
+pred_npj <- ifelse(model_train$votes[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on elife
+pd_elife <- predict(model_train, data_elife, type = "prob")
+roc_elife <- roc(as.numeric(data_elife$cond == "LC"), as.numeric(pd_elife[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_elife <- ifelse(pd_elife[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on therano
+pd_therano <- predict(model_train, data_therano, type = "prob")
+roc_therano <- roc(as.numeric(data_therano$cond == "LC"), as.numeric(pd_therano[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_therano <- ifelse(pd_therano[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on frontiers
+pd_front <- predict(model_train, data_frontiers, type = "prob")
+roc_frontiers <- roc(as.numeric(data_frontiers$cond == "LC"), as.numeric(pd_front[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_front <- ifelse(pd_front[, 2] < best_thr$threshold, "HD", "LC")
+
+# summarize model performance
+all_roc <- data.frame(resp = as.factor(c(data_elife$cond, data_therano$cond, data_frontiers$cond, c(data_elife$cond, data_therano$cond, data_frontiers$cond))), pred = c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2], c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2])), dataset = c(rep("Chen et al. (2022)", times = nrow(data_elife)), rep("Zhu et al. (2021)", nrow(data_therano)), rep("Block et al. (2022)", times = nrow(data_frontiers)), c(rep("Total", times = nrow(data_elife) + nrow(data_therano) + nrow(data_frontiers))))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+total_roc <- all_roc %>% dplyr::filter(dataset == "Total")
+roc_all <- roc(response = total_roc$resp, predictor = total_roc$pred, levels = c("0", "1"), direction = "<", plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE)
+
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 15), guide = guide_legend()) +
+  ggtitle("Chen et al. gene markers") +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2), conf_low = c(roc_elife$ci[1], roc_therano$ci[1], roc_frontiers$ci[1], roc_all$ci[1]), conf_high = c(roc_rf_elife$ci[3], roc_rf_therano$ci[3], roc_rf_front$ci[3], roc_all$ci[3])) %>% dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_errorbar(aes(x = dataset, ymin = conf_low, ymax = conf_high), width = 0.5, linewidth = 0.5, alpha = 1) +
+  geom_text(aes(label = AUC), nudge_y = -(b$AUC - b$conf_high - 0.07), color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+preds <- ifelse(all_roc$pred < best_thr$threshold, 0, 1)
+all_roc$pred_class <- as.character(c(pred_elife, pred_therano, pred_front))
+all_roc$resp <- as.character(ifelse(all_roc$resp == 0, "HD", "LC"))
+save_roc <- all_roc
+all_roc <- all_roc %>%
+  dplyr::filter(dataset != "Total") %>%
+  droplevels()
+
+eval <- evaluate(all_roc,
+  target_col = "resp",
+  prediction_cols = "pred_class",
+  type = "binomial"
+)
+conf_mat <- eval$`Confusion Matrix`[[1]]
+p2b <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = font(size = 9, color = "black"), font_col_percentages = font(size = 4.5, color = "black"), font_row_percentages = font(size = 4.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+
+elife1 <- p1
+elife2 <- p2b
+
+# model performance per condition and dataset
+save_roc$pred_class <- ifelse(save_roc$pred_class == "HD", "0", "1")
+save_roc$resp <- ifelse(save_roc$resp == "HD", "0", "1")
+save_roc %>%
+  dplyr::filter(resp != pred_class) %>%
+  dplyr::count(dataset, resp)
+elife_mark_rf <- save_roc
+
+# get the testing phase data for future use
+elife_npj <- data.frame(resp = as.factor(c(data_npj$cond)), pred_class = c(pred_npj), pred = model_train$votes[, 2]) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(pred_class = ifelse(pred_class == "LC", 1, 0))
+```
+
+# npj + elife
+
+```{r, npj_elife, warning = FALSE, fig.width= 15, fig.height=8}
+### from npj+elife papers
+gene_list <- c("FGB", "FGA", "CP", "C3", "IFITM3", "FGG", "ATP1B1", "HRG", "APOE", "DHCR24", "TF", "HRG", "GOLGA6L1")
+# npj data prep - filter only those markers and combine with metadata
+select_datac <- which((row.names(npj_batch)) %in% (gene_list))
+data_npj <- cbind(npj_meta, t(npj_batch[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# elife data prep
+select_datac <- which((row.names(elife_countm_filt)) %in% (gene_list))
+data_elife <- cbind(elife_meta_filt, t(elife_countm_filt[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# therano data prep
+select_datac <- which((row.names(therano_countm)) %in% (gene_list))
+data_therano <- cbind(therano_meta, t(therano_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# frontiers data prep
+select_datac <- which((row.names(frontiers_countm)) %in% (gene_list))
+data_frontiers <- cbind(frontiers_meta, t(frontiers_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+```
+
+## npj + elife - random forest model
+
+```{r, npj_elife_rf, warning = FALSE, fig.width= 15, fig.height=8}
+## rf
+# determien optimal number of trees
+set.seed(5)
+repeat_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 5, savePredictions = TRUE, summaryFunction = twoClassSummary, classProbs = TRUE)
+forest <- caret::train(cond ~ ., data = data_npj, method = "rf", trControl = repeat_cv, metric = "ROC", tuneLength = 10)
+# optimal tune
+forest$bestTune
+
+# train a model
+set.seed(5)
+model_train <- randomForest(cond ~ ., data = data_npj, mtry = as.numeric(forest$bestTune))
+rf_npj_roc <- roc(data_npj$cond, model_train$votes[, 2], levels = c("HD", "LC"), direction = "<", plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, main = "ROC plot calculated with RF votes - used also for optimal cut-off calculation")
+# optimal threshold
+best_thr <- coords(rf_npj_roc, "best", best.method = "youden", best.weights = c(1, 0.5))
+pred_npj <- ifelse(model_train$votes[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on elife
+pd_elife <- predict(model_train, data_elife, type = "prob")
+roc_rf_elife <- roc(as.numeric(data_elife$cond == "LC"), as.numeric(pd_elife[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_elife <- ifelse(pd_elife[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on therano
+pd_therano <- predict(model_train, data_therano, type = "prob")
+roc_rf_therano <- roc(as.numeric(data_therano$cond == "LC"), as.numeric(pd_therano[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_therano <- ifelse(pd_therano[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on frontiers
+pd_front <- predict(model_train, data_frontiers, type = "prob")
+roc_rf_front <- roc(as.numeric(data_frontiers$cond == "LC"), as.numeric(pd_front[, 2]), plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_front <- ifelse(pd_front[, 2] < best_thr$threshold, "HD", "LC")
+
+# summarize model performance
+all_roc <- data.frame(resp = as.factor(c(data_elife$cond, data_therano$cond, data_frontiers$cond, c(data_elife$cond, data_therano$cond, data_frontiers$cond))), pred = c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2], c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2])), dataset = c(rep("Chen et al. (2022)", times = nrow(data_elife)), rep("Zhu et al. (2021)", nrow(data_therano)), rep("Block et al. (2022)", times = nrow(data_frontiers)), c(rep("Total", times = nrow(data_elife) + nrow(data_therano) + nrow(data_frontiers))))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+total_roc <- all_roc %>% dplyr::filter(dataset == "Total")
+roc_all <- roc(response = total_roc$resp, predictor = total_roc$pred, levels = c("0", "1"), direction = "<", plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE)
+# plot results
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 15), guide = guide_legend()) +
+  ggtitle("Combined gene markers") +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2), conf_low = c(roc_rf_elife$ci[1], roc_rf_therano$ci[1], roc_rf_front$ci[1], roc_all$ci[1]), conf_high = c(roc_rf_elife$ci[3], roc_rf_therano$ci[3], roc_rf_front$ci[3], roc_all$ci[3])) %>% dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_errorbar(aes(x = dataset, ymin = conf_low, ymax = conf_high), width = 0.5, linewidth = 0.5, alpha = 1) +
+  geom_text(aes(label = AUC), nudge_y = -(b$AUC - b$conf_high - 0.07), color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+preds <- ifelse(all_roc$pred < best_thr$threshold, 0, 1)
+all_roc$pred_class <- as.character(c(pred_elife, pred_therano, pred_front))
+all_roc$resp <- as.character(ifelse(all_roc$resp == 0, "HD", "LC"))
+save_roc <- all_roc
+all_roc <- all_roc %>%
+  dplyr::filter(dataset != "Total") %>%
+  droplevels()
+eval <- evaluate(all_roc,
+  target_col = "resp",
+  prediction_cols = "pred_class",
+  type = "binomial"
+)
+conf_mat <- eval$`Confusion Matrix`[[1]]
+p2b <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = font(size = 9, color = "black"), font_col_percentages = font(size = 4.5, color = "black"), font_row_percentages = font(size = 4.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+
+comb1 <- p1
+comb2 <- p2b
+
+save_roc$pred_class <- ifelse(save_roc$pred_class == "HD", "0", "1")
+save_roc$resp <- ifelse(save_roc$resp == "HD", "0", "1")
+save_roc %>%
+  dplyr::filter(resp != pred_class) %>%
+  dplyr::count(dataset, resp)
+all_mark_rf <- save_roc
+
+# get the testing phase results for future use
+comb_npj <- data.frame(resp = as.factor(c(data_npj$cond)), pred_class = c(pred_npj), pred = model_train$votes[, 2]) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(pred_class = ifelse(pred_class == "LC", 1, 0))
+
+# the plots
+
+npj1
+elife1
+comb1
+npj2
+elife2
+comb2
+
+# export relevant data
+save(npj_mark_rf, elife_mark_rf, all_mark_rf, npj1, npj2, elife1, elife2, comb1, comb2, npj_npj, elife_npj, comb_npj, file = "./data/marker_res.RData")
+```
+
+```{r}
+sessionInfo()
+```

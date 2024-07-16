@@ -1,0 +1,44 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job               count
+--------------  -------
+all                   1
+cfrna_input           1
+cfrna_wgcna           1
+exorna_input          1
+exorna_wgcna          1
+fig3_2                1
+fig3_3_7              1
+fig3_4_5_10_12        1
+fig3_8                1
+fig3_9_11             1
+metacells             1
+module_pres_sc        1
+total                12
+
+Select jobs to execute...
+Failed to solve scheduling problem with ILP solver. Falling back to greedy solver. Run Snakemake with --verbose to see the full solver output for debugging the problem.
+
+[Wed Jul  3 13:25:16 2024]
+rule exorna_input:
+    output: markdown_results/exorna_input_clean.html
+    jobid: 6
+    reason: Missing output files: markdown_results/exorna_input_clean.html
+    threads: 15
+    resources: tmpdir=/tmp
+
+Terminating processes on user request, this might take some time.
+[Wed Jul  3 13:25:20 2024]
+Error in rule exorna_input:
+    jobid: 6
+    output: markdown_results/exorna_input_clean.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 32:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmp3kda44ds.exorna_input_clean.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/exorna_input_clean.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmp3kda44ds.exorna_input_clean.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 32, in __rule_exorna_input
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Complete log: .snakemake/log/2024-07-03T132514.570390.snakemake.log

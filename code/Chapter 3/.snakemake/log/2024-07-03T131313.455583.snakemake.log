@@ -1,0 +1,102 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job               count
+--------------  -------
+all                   1
+cfrna_input           1
+cfrna_wgcna           1
+exorna_input          1
+exorna_wgcna          1
+fig3_2                1
+fig3_3_7              1
+fig3_4_5_10_12        1
+fig3_8                1
+fig3_9_11             1
+metacells             1
+module_pres_sc        1
+total                12
+
+Resources before job selection: {'_cores': 15, '_nodes': 9223372036854775807}
+Ready jobs (3)
+Select jobs to execute...
+Failed to solve scheduling problem with ILP solver. Falling back to greedy solver. Run Snakemake with --verbose to see the full solver output for debugging the problem.
+Selected jobs (1)
+Resources after job selection: {'_cores': 0, '_nodes': 9223372036854775806}
+
+[Wed Jul  3 13:13:15 2024]
+rule exorna_input:
+    output: markdown_results/exorna_input_clean.html
+    jobid: 6
+    reason: Missing output files: markdown_results/exorna_input_clean.html
+    threads: 15
+    resources: tmpdir=/tmp
+
+Full Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2656, in run_wrapper
+    run(
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 78, in __rule_exorna_input
+    "markdown_results/cf_wgcna_suppl_file2.html",
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 1567, in script
+    executor.evaluate()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 455, in evaluate
+    self.execute_script(fd.name, edit=edit)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 909, in execute_script
+    self._execute_cmd(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 486, in _execute_cmd
+    return shell(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/shell.py", line 294, in __new__
+    raise sp.CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/exorna_input_clean.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd"))'' returned non-zero exit status 1.
+
+[Wed Jul  3 13:13:15 2024]
+Error in rule exorna_input:
+    jobid: 6
+    output: markdown_results/exorna_input_clean.html
+
+Full Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2656, in run_wrapper
+    run(
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 78, in __rule_exorna_input
+    "markdown_results/cf_wgcna_suppl_file2.html",
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 1567, in script
+    executor.evaluate()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 455, in evaluate
+    self.execute_script(fd.name, edit=edit)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 909, in execute_script
+    self._execute_cmd(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 486, in _execute_cmd
+    return shell(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/shell.py", line 294, in __new__
+    raise sp.CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/exorna_input_clean.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd"))'' returned non-zero exit status 1.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 715, in _callback
+    raise ex
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 699, in cached_or_run
+    run_func(*args)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2692, in run_wrapper
+    raise RuleException(
+snakemake.exceptions.RuleException: CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 32:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/exorna_input_clean.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 32, in __rule_exorna_input
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 32:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/exorna_input_clean.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpy9to_k8l.exorna_input_clean.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 32, in __rule_exorna_input
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-03T131313.455583.snakemake.log
+unlocking
+removing lock
+removing lock
+removed all locks

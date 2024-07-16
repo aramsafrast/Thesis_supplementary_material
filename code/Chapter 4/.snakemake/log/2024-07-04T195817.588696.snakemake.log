@@ -1,0 +1,48 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job             count
+------------  -------
+all                 1
+bio_insights        1
+conf_factors        1
+suppl_files         1
+total               4
+
+Select jobs to execute...
+
+[Thu Jul  4 19:58:19 2024]
+rule bio_insights:
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html
+    output: bio_insights_fig4_4_5.html
+    jobid: 6
+    reason: Missing output files: bio_insights_fig4_4_5.html
+    resources: tmpdir=/tmp
+
+[Thu Jul  4 19:58:19 2024]
+rule conf_factors:
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html
+    output: conf_factors_fig4_7.html
+    jobid: 7
+    reason: Missing output files: conf_factors_fig4_7.html
+    resources: tmpdir=/tmp
+
+[Thu Jul  4 19:58:31 2024]
+Error in rule conf_factors:
+    jobid: 7
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html
+    output: conf_factors_fig4_7.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline, line 55:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmp1k5308qb.conf_factors_fig4_7.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/conf_factors_fig4_7.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmp1k5308qb.conf_factors_fig4_7.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline", line 55, in __rule_conf_factors
+  File "/home/si48met/miniconda3/envs/cfdeconv_lc/lib/python3.10/concurrent/futures/thread.py", line 58, in run
+[Thu Jul  4 19:58:40 2024]
+Finished job 6.
+1 of 4 steps (25%) done
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-04T195817.588696.snakemake.log

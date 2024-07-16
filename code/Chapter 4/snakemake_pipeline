@@ -1,0 +1,69 @@
+rule all:
+	"""
+	Main outputs of the workflow
+        """
+	input:
+                "suppl_files1_4_5.html",
+                "conf_factors_fig4_7.html",
+                "bio_insights_fig4_4_5.html"
+
+rule cfrna_process:
+        output:
+                "cfdata_preprocess_fig2_1.html"
+        script:
+                "cfdata_preprocess_fig2_1.Rmd"
+
+rule cfrna_deconv:
+        input:
+                "cfdata_preprocess_fig2_1.html"
+        output:
+                "bisque_deconv_suppl_file4.html"
+        script:
+                "bisque_deconv_suppl_file4.Rmd"
+
+rule gene_markers:
+        input:
+                "bisque_deconv_suppl_file4.html"
+        output:
+                "ext_markers_fig4_8.html"
+        script:
+                "ext_markers_fig4_8.Rmd"
+
+rule deconv_analysis:
+        input:
+                "ext_markers_fig4_8.html",
+                "bisque_deconv_suppl_file4.html"
+        output:
+                "deconv_analysis_fig2_3fig4_2_3_6_9.html"
+        script:
+                "deconv_analysis_fig2_3fig4_2_3_6_9.Rmd"
+
+rule bio_insights:
+        input:
+                "deconv_analysis_fig2_3fig4_2_3_6_9.html",
+        output:
+                "bio_insights_fig4_4_5.html"
+        script:
+                "bio_insights_fig4_4_5.Rmd"
+
+rule conf_factors:
+        input:
+                "deconv_analysis_fig2_3fig4_2_3_6_9.html"
+        output:
+                "conf_factors_fig4_7.html"
+        script:
+                "conf_factors_fig4_7.Rmd"
+
+rule suppl_files:
+        input:
+                "deconv_analysis_fig2_3fig4_2_3_6_9.html",
+                "conf_factors_fig4_7.html",
+                "bio_insights_fig4_4_5.html"
+        output:
+                "suppl_files1_4_5.html"
+        script:
+                "suppl_files1_4_5.Rmd"
+
+
+
+

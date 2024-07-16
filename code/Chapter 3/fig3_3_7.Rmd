@@ -1,0 +1,161 @@
+---
+title: "Generation of main Figure 3.3; 3.7"
+subtitle: "Data of Zhu et al. https://doi.org/10.7150%2Fthno.48206"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r global_options, echo = F}
+knitr::opts_chunk$set(fig.path = "markdown_results/")
+```
+
+# load libraries
+***
+
+```{r libraries, message=F, warning=F}
+library(WGCNA)
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+library(tibble)
+library(tidyr)
+library(ragg)
+library(scales)
+library(forcats)
+library(stringr)
+library(openxlsx)
+library(DT)
+library(ggpubr)
+library(ggrepel)
+options(ggrepel.max.overlaps = Inf)
+```
+
+# Generation of Figure 3.3
+***
+
+```{r fig3_3, warning=F, message=F, fig.width= 12, fig.height=10, fig.align='center'}
+load("./cfrna/results/wgcna_main/cfwgcna.RData")
+# get the gene and sample numbers of gene expression input
+nGenes <- ncol(cfrna_wgcna_input)
+nSamples <- nrow(cfrna_wgcna_input)
+# get and order module eigengenes
+MEs0 <- moduleEigengenes(cfrna_wgcna_input, cfmergedcolors)$eigengenes
+MEs <- orderMEs(MEs0)
+# remove grey module which contains unassigned genes
+MEs <- removeGreyME(MEs, greyMEName = paste(moduleColor.getMEprefix(), "grey", sep = ""))
+# correlate traits with modules
+moduleTraitCor <- cor(MEs, cfrna_meta_input, use = "p")
+# get the p values
+moduleTraitPvalue <- corPvalueStudent(moduleTraitCor, nSamples)
+# FDR correction of p values for each trait correlation
+moduleTraitPvalue[, 1] <- p.adjust(moduleTraitPvalue[, 1], method = "fdr")
+moduleTraitPvalue[, 2] <- p.adjust(moduleTraitPvalue[, 2], method = "fdr")
+moduleTraitPvalue[, 3] <- p.adjust(moduleTraitPvalue[, 3], method = "fdr")
+# to plot the results in ggplot some data wrangling needs to be done
+module_trait_df <- as.data.frame(moduleTraitCor)
+module_trait_df$modules <- gsub("ME", "", rownames(module_trait_df))
+module_trait_long <- module_trait_df %>%
+  pivot_longer(!modules, names_to = "cor", values_to = "value") %>%
+  mutate(cor = fct_recode(cor, "disease state" = "disease_state")) %>%
+  dplyr::mutate(value = abs(value))
+module_p_df <- as.data.frame(moduleTraitPvalue)
+module_p_df$modules <- gsub("ME", "", rownames(module_p_df))
+module_p_long <- module_p_df %>%
+  pivot_longer(!modules, names_to = "cor", values_to = "value") %>%
+  mutate(cor = fct_recode(cor, "disease state" = "disease_state")) %>%
+  mutate(sign = ifelse(value < 0.05, "< 0.05", "≥ 0.05"))
+module_trait_long$modules <- factor(module_trait_long$modules, levels = rev(c("cf-blue", "cf-turquoise", "cf-yellow", "cf-purple", "cf-black", "cf-magenta", "cf-brown", "cf-red")))
+# plot the core heatmap
+heatmap_core <- ggplot(module_trait_long, aes(x = cor, y = modules)) +
+  geom_tile(color = "black", aes(fill = value)) +
+  scale_fill_distiller(palette = "RdBu") +
+  labs(x = "", y = "", fill = expression(abs(italic(r)))) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  theme(
+    legend.title.align = 0.5,
+    legend.key = element_rect(fill = "lightblue", color = NA),
+    legend.key.size = unit(2.5, "cm"),
+    legend.key.width = unit(1.5, "cm")
+  )
+# populate the heatmap
+heatmap_full <- heatmap_core +
+  geom_point(data = module_p_long, aes(x = cor, y = modules, color = sign), size = 5) +
+  scale_color_manual(values = c("< 0.05" = "black", "≥ 0.05" = "darkgrey")) +
+  labs(x = "", y = "", color = expression(italic(p)["adjusted"])) +
+  theme_bw(base_size = 17, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 18, face = "bold", hjust = 0.5), plot.subtitle = element_text(color = "black", size = 17, face = "bold", hjust = 0.5)) +
+  theme(legend.key = element_blank(), legend.key.height = unit(1, "cm"), legend.key.width = unit(1, "cm"), legend.title.align = 0.2) + ggtitle("Module-trait relationships for cell-free RNA dataset of Zhu et al.")
+print(heatmap_full)
+# export the plot
+ggsave(plot = heatmap_full, file = "./figures/fig3_3.png")
+```
+
+# Generation of Figure 3.7
+***
+
+```{r fig3_7, warning=F, message=F, fig.width= 10, fig.height=8, fig.align='center'}
+# extract the disease state information
+condition <- as.data.frame(cfrna_meta_input$disease_state)
+names(condition) <- "Condition"
+# names (colors) of the modules
+modNames <- substring(names(MEs), 3)
+# calculate the gene module membership and its significance
+geneModuleMembership <- as.data.frame(cor(cfrna_wgcna_input, MEs, use = "p"))
+MMPvalue <- as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples))
+names(geneModuleMembership) <- paste("MM", modNames, sep = "")
+names(MMPvalue) <- paste("p.MM", modNames, sep = "")
+# calculate the correlation and significance of gene-trait relationship
+geneTraitSignificance <- as.data.frame(cor(cfrna_wgcna_input, condition, use = "p"))
+GSPvalue <- as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples))
+names(geneTraitSignificance) <- paste("GS.", names(condition), sep = "")
+names(GSPvalue) <- paste("p.GS.", names(condition), sep = "")
+geneModuleMembership$trait <- geneTraitSignificance$GS.Condition
+# we will look for the results of only cf-yellow module
+module <- "cf-yellow"
+column <- match(module, modNames)
+moduleGenes <- cfmergedcolors == module
+# these genes are have the highest connectivities (> 50) in cf-yellow and hence will be highlighted (see cf_wgcna_suppl_file2.Rmd for they were generated)
+genes_interest <- geneModuleMembership %>%
+  rownames_to_column(var = "genes") %>%
+  dplyr::filter(genes %in% c("ADPGK", "MPEG1", "UGCG", "RUNX2", "WDFY4", "MDN1", "OGT", "CIITA", "TCF4"))
+# plot the results
+yellow <- geneModuleMembership %>%
+  filter(moduleGenes) %>%
+  rownames_to_column(., var = "genes") %>%
+  {
+    ggplot(., aes(x = `MMcf-yellow`, y = trait, label = genes)) +
+      geom_point(size = 3, color = "yellow2", alpha = 0.5) +
+      geom_label_repel(data = genes_interest, aes(x = `MMcf-yellow`, y = trait), force = 15, label.size = 1, size = 5, nudge_y = 0.1) +
+      geom_smooth(method = "lm", color = "darkred", se = F) +
+      stat_cor(method = "pearson", size = 6, color = "black", label.x.npc = 0.001) +
+      scale_x_continuous(limits = c(-0.87, 0.95), breaks = pretty_breaks(n = 10)) +
+      scale_y_continuous(limits = c(-0.8, 0.9), breaks = pretty_breaks(n = 7)) +
+      labs(x = "Module membership in the module cf-yellow", y = paste0("Gene-trait significance", "\n", "for disease state")) +
+      theme_classic(base_size = 24, base_family = "Arial", base_line_size = 0, base_rect_size = 0) +
+      theme(
+        plot.title = element_text(color = "black", size = 18, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(color = "black", size = 17, face = "bold", hjust = 0.5)
+      )
+  }
+yellow
+# export the plot
+ggsave(plot = yellow, file = "./figures/fig3_7.png", units = "mm", device = ragg::agg_png, height = 200, width = 350, scaling = 1, limitsize = FALSE)
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,49 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 20
+Rules claiming more threads will be scaled down.
+Job stats:
+job         count
+--------  -------
+all             1
+fig3_2          1
+fig3_3_7        1
+fig3_8          1
+total           4
+
+Select jobs to execute...
+Failed to solve scheduling problem with ILP solver. Falling back to greedy solver. Run Snakemake with --verbose to see the full solver output for debugging the problem.
+
+[Sat Jul  6 12:19:46 2024]
+rule fig3_2:
+    input: markdown_results/cf_wgcna_suppl_file2.html, markdown_results/exo_wgcna_suppl_file3.html
+    output: markdown_results/fig3_2.html
+    jobid: 11
+    reason: Missing output files: markdown_results/fig3_2.html
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 12:19:46 2024]
+rule fig3_3_7:
+    input: markdown_results/cfrna_input_clean.html
+    output: markdown_results/fig3_3_7.html
+    jobid: 1
+    reason: Missing output files: markdown_results/fig3_3_7.html
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 12:20:04 2024]
+Error in rule fig3_3_7:
+    jobid: 1
+    input: markdown_results/cfrna_input_clean.html
+    output: markdown_results/fig3_3_7.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 65:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpvldr3nip.fig3_3_7.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_3_7.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpvldr3nip.fig3_3_7.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 65, in __rule_fig3_3_7
+  File "/home/si48met/miniconda3/envs/cfwgcna_final/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+[Sat Jul  6 12:20:05 2024]
+Finished job 11.
+1 of 4 steps (25%) done
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-06T121944.219916.snakemake.log

@@ -1,0 +1,304 @@
+---
+title: "Inference of cellular interactions; Figure 5.4 & Suppl. File 9"
+author: "Aram Safrastyan"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    N of_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+# load libraries
+***
+
+```{r, pkgs, message=F, warning=F}
+# laod libraries
+library(tidyverse)
+library(BulkSignalR)
+library(circlize)
+library(magick)
+library(readxl)
+library(igraph)
+library(ggraph)
+library(gtools)
+library(openxlsx)
+```
+
+# Data preparation
+***
+
+```{r, lri, fig.width= 15, fig.height=8, warning = F, message = F, error=F, eval = T}
+# load Chen et al., 2022/elife LRIs
+load("./data/ESCA.RData")
+esca_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+load("./data/HD.RData")
+hd_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+load("./data/LUAD.RData")
+luad_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+load("./data/STAD.RData")
+stad_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+load("./data/CRC.RData")
+crc_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+load("./data/LC.RData")
+lc_LR <- LRinter(bsrinf) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+rm(bsrdm, bsrinf, scoresPathway)
+
+# load Zhu et al., 2021/therano LRIs
+load("./data/therano_lrp.RData")
+hcc_therano <- LRinter(bsrinf_therano_hcc) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+nc_therano <- LRinter(bsrinf_therano_nc) %>%
+  dplyr::mutate(lr = paste0(L, "_", R)) %>%
+  dplyr::filter(qval < 0.001)
+
+# exclude LRIs found in corresponding HD cohorts
+esca_nohd <- esca_LR %>% dplyr::filter(lr %in% setdiff(esca_LR$lr, hd_LR$lr))
+stad_nohd <- stad_LR %>% dplyr::filter(lr %in% setdiff(stad_LR$lr, hd_LR$lr))
+crc_nohd <- crc_LR %>% dplyr::filter(lr %in% setdiff(crc_LR$lr, hd_LR$lr))
+luad_nohd <- luad_LR %>% dplyr::filter(lr %in% setdiff(luad_LR$lr, hd_LR$lr))
+elife_lc_nohd <- lc_LR %>% dplyr::filter(lr %in% setdiff(lc_LR$lr, hd_LR$lr))
+therano_lc_nohd <- hcc_therano %>% dplyr::filter(lr %in% setdiff(hcc_therano$lr, nc_therano$lr))
+# same with LC intersected df
+elife_therano <- lc_LR %>% dplyr::filter(lr %in% hcc_therano$lr)
+elife_therano_nohd <- elife_therano %>%
+  dplyr::filter(lr %in% hcc_therano$lr) %>%
+  dplyr::filter(lr %in% setdiff(elife_therano$lr, c(hd_LR$lr, nc_therano$lr)))
+
+# load scRNA-seq LRIs
+load("./data/hbv_liana_lrdb.RData")
+lc_sc <- liana_raw %>%
+  mutate(source = recode(source, Hepatic_Stellate_Cells = "HSCs", Portal_endothelial_Cells = "PECs")) %>%
+  mutate(target = recode(target, Hepatic_Stellate_Cells = "HSCs", Portal_endothelial_Cells = "PECs")) %>%
+  dplyr::mutate(lr = paste0(ligand.complex, "_", receptor.complex)) %>%
+  dplyr::filter(cellphonedb.pvalue < 0.05 & sca.LRscore >= 0.5)
+
+# clean cell type names
+lc_sc <- lc_sc %>%
+  mutate(target = case_when(
+    target == "HSCs" ~ "Hepatic stellate cells",
+    target == "Macrophage" ~ "Macrophages",
+    target == "NK-like_Cells" ~ "NK-like cells",
+    target == "Hepatocyte" ~ "Hepatocytes",
+    target == "Plasma_Cells" ~ "Plasma cells",
+    target == "T_Cells" ~ "T cells",
+    target == "Mature_B_Cells" ~ "Mature B cells",
+    TRUE ~ target
+  )) %>%
+  mutate(source = case_when(
+    source == "HSCs" ~ "Hepatic stellate cells",
+    source == "Macrophage" ~ "Macrophages",
+    source == "NK-like_Cells" ~ "NK-like cells",
+    source == "Hepatocyte" ~ "Hepatocytes",
+    source == "Plasma_Cells" ~ "Plasma cells",
+    source == "T_Cells" ~ "T cells",
+    source == "Mature_B_Cells" ~ "Mature B cells",
+    TRUE ~ source
+  ))
+```
+
+# CCIs; Figure 5.4
+***
+
+```{r, fig5_4, fig.width= 15, fig.height=8, warning = F, message = F, error=F, eval = T}
+# define necessary functions for visualization
+"%||%" <- function(a, b) if (is.null(a)) b else a
+draw_key_cust <- function(data, params, size) {
+  grid::segmentsGrob(0.1, 0.5, 0.9, 0.5,
+    gp = grid::gpar(
+      col = alpha(
+        data$edge_colour,
+        data$edge_alpha
+      ), fill = alpha(params$arrow.fill %||%
+        data$edge_colour %||% data$edge_fill %||% "black", data$edge_alpha),
+      lwd = data$edge_width * .pt, lty = data$edge_linetype,
+      lineend = "butt"
+    )
+  )
+}
+
+# get the therano HD CCIs that have corresponding LRIs in the scRNA-seq dataset and count the CCIs
+hd_sc <- lc_sc %>%
+  dplyr::filter(lr %in% nc_therano$lr) %>%
+  mutate(source = ifelse(source %in% c("LSECs", "PECs"), "Endothelial cells", source), target = ifelse(target %in% c("LSECs", "PECs"), "Endothelial cells", target)) %>%
+  mutate(
+    source = ifelse(source %in% c("NK-like cells", "T cells"), "NK/T", source),
+    target = ifelse(target %in% c("NK-like cells", "T cells"), "NK/T", target)
+  ) %>%
+  mutate(
+    source = ifelse(source %in% c("Plasma cells", "Mature B cells"), "B cells", source),
+    target = ifelse(target %in% c("Plasma cells", "Mature B cells"), "B cells", target)
+  ) %>%
+  dplyr::mutate(cci = paste0(source, "_", target)) %>%
+  dplyr::count(cci, sort = TRUE)
+
+# get the therano LC CCIs that have corresponding LRIs in the scRNA-seq dataset and count the CCIs
+hcc_sc <- lc_sc %>%
+  dplyr::filter(lr %in% hcc_therano$lr) %>%
+  mutate(source = ifelse(source %in% c("LSECs", "PECs"), "Endothelial cells", source), target = ifelse(target %in% c("LSECs", "PECs"), "Endothelial cells", target)) %>%
+  mutate(
+    source = ifelse(source %in% c("NK-like cells", "T cells"), "NK/T", source),
+    target = ifelse(target %in% c("NK-like cells", "T cells"), "NK/T", target)
+  ) %>%
+  mutate(
+    source = ifelse(source %in% c("Plasma cells", "Mature B cells"), "B cells", source),
+    target = ifelse(target %in% c("Plasma cells", "Mature B cells"), "B cells", target)
+  ) %>%
+  dplyr::mutate(cci = paste0(source, "_", target)) %>%
+  dplyr::count(cci, sort = TRUE)
+
+# merge the therano data
+merged_cci1 <- full_join(hd_sc, hcc_sc, by = c("cci" = "cci")) %>%
+  na.replace(0) %>%
+  mutate(logfold = foldchange(n.y / sum(n.y), n.x / sum(n.x)))
+
+# get the elife HD CCIs that have corresponding LRIs in the scRNA-seq dataset and count the CCIs
+hd_sc <- lc_sc %>%
+  dplyr::filter(lr %in% hd_LR$lr) %>%
+  mutate(source = ifelse(source %in% c("LSECs", "PECs"), "Endothelial cells", source), target = ifelse(target %in% c("LSECs", "PECs"), "Endothelial cells", target)) %>%
+  mutate(
+    source = ifelse(source %in% c("NK-like cells", "T cells"), "NK/T", source),
+    target = ifelse(target %in% c("NK-like cells", "T cells"), "NK/T", target)
+  ) %>%
+  mutate(
+    source = ifelse(source %in% c("Plasma cells", "Mature B cells"), "B cells", source),
+    target = ifelse(target %in% c("Plasma cells", "Mature B cells"), "B cells", target)
+  ) %>%
+  dplyr::mutate(cci = paste0(source, "_", target)) %>%
+  dplyr::count(cci, sort = TRUE)
+
+# get the elife LC CCIs that have corresponding LRIs in the scRNA-seq dataset and count the CCIs
+hcc_sc <- lc_sc %>%
+  dplyr::filter(lr %in% lc_LR$lr) %>%
+  mutate(source = ifelse(source %in% c("LSECs", "PECs"), "Endothelial cells", source), target = ifelse(target %in% c("LSECs", "PECs"), "Endothelial cells", target)) %>%
+  mutate(
+    source = ifelse(source %in% c("NK-like cells", "T cells"), "NK/T", source),
+    target = ifelse(target %in% c("NK-like cells", "T cells"), "NK/T", target)
+  ) %>%
+  mutate(
+    source = ifelse(source %in% c("Plasma cells", "Mature B cells"), "B cells", source),
+    target = ifelse(target %in% c("Plasma cells", "Mature B cells"), "B cells", target)
+  ) %>%
+  dplyr::mutate(cci = paste0(source, "_", target)) %>%
+  dplyr::count(cci, sort = TRUE)
+
+# combine the elife data
+merged_cci <- full_join(hd_sc, hcc_sc, by = c("cci" = "cci")) %>%
+  na.replace(0) %>%
+  mutate(logfold = foldchange(n.y / sum(n.y), n.x / sum(n.x)))
+
+# merge the elife and therano data via intersection + calculate the fold change between the frequency of CCIs between LC and HD
+l <- inner_join(merged_cci, merged_cci1, by = c("cci" = "cci")) %>%
+  dplyr::mutate(e = logfold.x * logfold.y) %>%
+  dplyr::filter(e > 0 & n.x.x > 0 & n.x.y > 0 & n.y.x > 0 & n.y.y > 0)
+data <- l %>%
+  separate(cci, into = c("from", "to"), sep = "_") %>%
+  dplyr::mutate(numb = (n.y.x + n.y.y) / 2) %>%
+  dplyr::mutate(fold = (logfold.x + logfold.y) / 2)
+
+# Create an igraph object
+graph <- graph_from_data_frame(d = data, directed = TRUE)
+
+# Plot the network graph
+ggraph(graph, layout = "circle") +
+  geom_edge_arc(aes(edge_width = numb, edge_color = fold),
+    show.legend = TRUE,
+    arrow = arrow(type = "closed", angle = 20, length = unit(0.15, "inches")),
+    key_glyph = "cust",
+    end_cap = circle(3, "mm"), curvature = 0.2
+  ) +
+  scale_edge_color_gradient2(
+    low = "darkblue", mid = "white", high = "brown", midpoint = 0,
+    name = "Fold Change"
+  ) +
+  scale_edge_width(range = c(0.5, 2), name = paste0("Number of", "\n", "Interactions")) +
+  geom_node_point(size = 5, color = "black") +
+  geom_edge_loop(aes(direction = (from - 1) * 360 / length(V(graph)), edge_width = numb, edge_color = fold)) +
+  geom_node_text(aes(label = name), repel = TRUE, size = 7, nudge_x = 0.05) +
+  theme_void(base_size = 18, base_family = "Arial")
+```
+
+# Suppl. File9
+***
+
+```{r, suppl_file9, fig.width= 15, fig.height=8, warning = F, message = F, error=F, eval = T}
+## count the CCIs in all instances through the scRNA-seq dataset
+# elife hd
+hd_cell_elife <- lc_sc %>%
+  dplyr::filter(lr %in% hd_LR$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# therano hd
+hd_cell_therano <- lc_sc %>%
+  dplyr::filter(lr %in% nc_therano$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# elife lc
+lc_cell_elife <- lc_sc %>%
+  dplyr::filter(lr %in% elife_lc_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# therano lc
+lc_cell_therano <- lc_sc %>%
+  dplyr::filter(lr %in% therano_lc_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# intersected lc
+intersected_cell <- lc_sc %>%
+  dplyr::filter(lr %in% elife_therano_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# esca
+esca_cell <- lc_sc %>%
+  dplyr::filter(lr %in% esca_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# stad
+stad_cell <- lc_sc %>%
+  dplyr::filter(lr %in% stad_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# crc
+crc_cell <- lc_sc %>%
+  dplyr::filter(lr %in% crc_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+# luad
+luad_cell <- lc_sc %>%
+  dplyr::filter(lr %in% luad_nohd$lr) %>%
+  dplyr::count(source, target, sort = TRUE)
+
+list_of_datasets <- list("N of LC cell-cell (Chen et al.)" = lc_cell_elife, "N of HD cell-cell (Chen et al.)" = hd_cell_elife, "N of LC cell-cell (Zhu et al.)" = lc_cell_therano, "N of HD cell-cell (Zhu et al.)" = hd_cell_therano, "N of LC cell-cell (intersected)" = intersected_cell, "N of ESCA cell-cell" = esca_cell, "N of STAD cell-cell" = stad_cell, "N of CRC cell-cell" = crc_cell, "N of LUAD cell-cell" = luad_cell)
+write.xlsx(list_of_datasets, file = "./suppl_files/Supplementary File 9 - Number of CCIs.xlsx")
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,322 @@
+---
+title: "Biological insight plots; Figure 4.4 & 4.5"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries
+library(ggrepel)
+library(randomForest)
+library(tidyverse)
+library(caret)
+library(scales)
+library(glmnet)
+library(readr)
+library(tidyverse)
+library(ggfortify)
+library(ggpubr)
+library(rstatix)
+library(DescTools)
+library(ggcorrplot)
+library(plotROC)
+library(patchwork)
+library(cvms)
+library(DT)
+library(openxlsx)
+library(viridis)
+```
+
+```{r setup, include=FALSE}
+theme_set(theme_classic(base_size = 18))
+```
+
+# EV vs plasma; Figure 4.5
+
+```{r, fig4_5, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/deconv_res_filt.RData")
+# set option for repelling the data annotations when plotting
+options(ggrepel.max.overlaps = Inf)
+# clean the data
+elife_clean <- elife_meta_deconv_filt %>%
+  dplyr::select(-c(samples))
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(cond, c(29:39))
+# separate frontiers dataset to EV (plasma vesicles) and plasma sourced samples
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48))
+front_ev <- frontiers_meta_deconv %>%
+  dplyr::filter(Tissue == "Plasma vesicles")
+# get the plasma samples that also had their EVs sampled
+samples <- gsub("MV$", "P", front_ev$Sample_id)
+front_pl <- frontiers_meta_deconv %>%
+  dplyr::filter(Sample_id %in% samples) %>%
+  dplyr::select(-c(1:48))
+front_ev <- front_ev %>%
+  dplyr::select(-c(1:48))
+# transform names to work with random forest
+npj_clean <- npj_clean %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+elife_clean <- elife_clean %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+frontiers_clean <- frontiers_clean %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+front_ev <- front_ev %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+front_pl <- front_pl %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+therano_clean <- therano_clean %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+# recode factor to numeric
+elife_clean <- elife_clean %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+therano_clean <- therano_clean %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+npj_clean <- npj_clean %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+frontiers_clean <- frontiers_clean %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+# extra steps for frontiers dataset (EV vs plasma)
+front_ev <- front_ev %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+front_pl <- front_pl %>% mutate(cond = as.factor(ifelse(cond == "HD", "0", "1")))
+front_comb <- rbind(front_ev, front_pl) %>%
+  dplyr::mutate(cond = c(rep(1, 5), rep(0, 5)))
+
+# frontiers extracellular vesicle data analysis
+## calculate importance of cell types in differentiating EV vs plasma LC samples via the MDA measurement of a random forest model
+set.seed(5)
+rf_ev <- randomForest(cond ~ ., data = front_comb, proximity = TRUE, importance = TRUE)
+ev_var <- varImpPlot(rf_ev, type = TRUE, main = "Block et al.; plasma vs EV")
+
+# data clenaup
+ev_var <- ev_var %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "cell_types")
+colnames(ev_var)[2] <- "importance"
+
+# plot result
+ev_mda <- ev_var %>%
+  as.data.frame() %>%
+  mutate(cell_types = fct_recode(cell_types,
+    "Hepatocytes" = "Hepatocyte",
+    "PECs" = "Portal_endothelial_Cells",
+    "HSCs" = "Hepatic_Stellate_Cells",
+    "Mature B cells" = "Mature_B_Cells",
+    "NK like cells" = "NK_like_Cells",
+    "Plasma cells" = "Plasma_Cells",
+    "Macrophages" = "Macrophage",
+    "Erythroid cells" = "Erythroid_Cells",
+    "T cells" = "T_Cells"
+  )) %>%
+  ggplot(., aes(x = reorder(cell_types, importance), y = importance, color = as.factor(cell_types))) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = cell_types, xend = cell_types, y = min(importance), yend = importance), lwd = 1.5) +
+  coord_flip() +
+  guides(colour = "none") +
+  ylab("Importance") +
+  xlab("") +
+  scale_y_continuous(expand = c(0, 0.5), breaks = c(0, 4, 8)) +
+  scale_color_viridis_d(option = "viridis", end = 0.97) +
+  theme_pubclean(base_size = 16, base_family = "Helvetica", flip = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"), panel.grid.minor = element_blank())
+
+
+# ev wilcoxon test of hepatocyte proportion levels between EV vs. plasma
+front_ev <- frontiers_meta_deconv %>%
+  dplyr::filter(Tissue == "Plasma vesicles")
+samples <- gsub("MV$", "P", front_ev$Sample_id)
+front_pl <- frontiers_meta_deconv %>%
+  dplyr::filter(Sample_id %in% samples)
+front_ev <- front_ev %>%
+  dplyr::select(-c(1:49), Sample_id)
+front_pl <- front_pl %>%
+  dplyr::select(-c(1:49), Sample_id)
+front_comb <- rbind(front_ev, front_pl) %>%
+  dplyr::mutate(tissue = c(rep(1, 5), rep(0, 5))) %>%
+  dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+ft <- front_comb %>%
+  dplyr::mutate(Sample_id = gsub("MV$", "", Sample_id)) %>%
+  dplyr::mutate(Sample_id = gsub("P$", "", Sample_id)) %>%
+  pivot_longer(names_to = "cells", values_to = "prop", cols = -c("tissue", "Sample_id"))
+stat.test <- ft %>%
+  arrange(tissue, Sample_id) %>%
+  dplyr::mutate(tissue = as.factor(ifelse(tissue == 1, "EV", "EV-free"))) %>%
+  dplyr::filter(cells == "Hepatocyte") %>%
+  wilcox_test(prop ~ tissue, alternative = "g", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", ref.group = "EV-free", paired = TRUE) %>%
+  add_significance("p") %>%
+  mutate(p = signif(p, 3))
+stat.test_effect <- ft %>%
+  arrange(tissue, Sample_id) %>%
+  dplyr::mutate(tissue = as.factor(ifelse(tissue == 1, "EV", "EV-free"))) %>%
+  dplyr::filter(cells == "Hepatocyte") %>%
+  wilcox_effsize(prop ~ tissue, alternative = "g", exact = TRUE, conf.level = 0.95, ref.group = "EV-free", paired = TRUE, ci = TRUE, nboot = 100)
+
+# plot the result
+ev_hepa <- ft %>%
+  dplyr::filter(cells == "Hepatocyte") %>%
+  dplyr::mutate(tissue = as.factor(ifelse(tissue == 1, "EV", "EV-free"))) %>%
+  ggplot(., aes(x = Sample_id, y = prop, fill = tissue)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(fill = "source") +
+  scale_fill_manual(labels = c("EV" = "EV", "EV-free" = "Plasma"), values = c("EV" = "blue", "EV-free" = "red4")) +
+  xlab("Patient ID") +
+  ylab("Hepatocyte proportion") +
+  theme_pubclean(base_size = 18, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold")) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+ev_mda
+ev_hepa
+
+# export the testing result
+ev_stat <- stat.test
+ev_effect <- stat.test_effect
+save(ev_stat, ev_effect, file = "./data/ev_stat.RData")
+```
+
+Figure 4.4
+
+```{r, bio_ins, fig.width= 15, fig.height=8, warning = FALSE}
+# cell type importance per dataset
+## npj dataset
+set.seed(5)
+rf_npj <- randomForest(cond ~ ., data = npj_clean, proximity = TRUE, importance = TRUE)
+b1 <- varImpPlot(rf_npj, type = TRUE, main = "Roskams-Hieter et al.")
+# plot
+o1 <- b1 %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "cell_types") %>%
+  mutate(cell_types = fct_recode(cell_types,
+    "Hepatocytes" = "Hepatocyte",
+    "PECs" = "Portal_endothelial_Cells",
+    "HSCs" = "Hepatic_Stellate_Cells",
+    "Mature B cells" = "Mature_B_Cells",
+    "NK like cells" = "NK_like_Cells",
+    "Plasma cells" = "Plasma_Cells",
+    "Macrophages" = "Macrophage",
+    "Erythroid cells" = "Erythroid_Cells",
+    "T cells" = "T_Cells"
+  )) %>%
+  ggplot(., aes(x = reorder(cell_types, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy, color = as.factor(cell_types))) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = cell_types, xend = cell_types, y = min(MeanDecreaseAccuracy), yend = MeanDecreaseAccuracy), lwd = 1.5) +
+  coord_flip() +
+  guides(colour = "none") +
+  ylab("Importance") +
+  xlab("") +
+  scale_y_continuous(expand = c(0, 0.5), breaks = c(0, 5, 10)) +
+  scale_color_viridis_d(option = "viridis", end = 0.97) +
+  ggtitle("Roskams-Hieter et al. (2022)") +
+  theme_pubclean(base_size = 16, base_family = "Helvetica", flip = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"), panel.grid.minor = element_blank())
+
+# elife
+set.seed(5)
+rf_elife <- randomForest(cond ~ ., data = elife_clean, proximity = TRUE, importance = TRUE) # , mtry = 2)
+b2 <- varImpPlot(rf_elife, type = TRUE, main = "Chen et al")
+o2 <- b2 %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "cell_types") %>%
+  mutate(cell_types = fct_recode(cell_types,
+    "Hepatocytes" = "Hepatocyte",
+    "PECs" = "Portal_endothelial_Cells",
+    "HSCs" = "Hepatic_Stellate_Cells",
+    "Mature B cells" = "Mature_B_Cells",
+    "NK like cells" = "NK_like_Cells",
+    "Plasma cells" = "Plasma_Cells",
+    "Macrophages" = "Macrophage",
+    "Erythroid cells" = "Erythroid_Cells",
+    "T cells" = "T_Cells"
+  )) %>%
+  ggplot(., aes(x = reorder(cell_types, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy, color = as.factor(cell_types))) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = cell_types, xend = cell_types, y = min(MeanDecreaseAccuracy), yend = MeanDecreaseAccuracy), lwd = 1.5) +
+  coord_flip() +
+  guides(colour = "none") +
+  ylab("Importance") +
+  xlab("") +
+  scale_y_continuous(expand = c(0, 0.5)) +
+  scale_color_viridis_d(option = "viridis", end = 0.97) +
+  ggtitle("Chen et al. (2022)") +
+  theme_pubclean(base_size = 16, base_family = "Helvetica", flip = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"), panel.grid.minor = element_blank())
+
+# therano
+set.seed(5)
+rf_therano <- randomForest(cond ~ ., data = therano_clean, proximity = TRUE, importance = TRUE)
+b3 <- varImpPlot(rf_therano, type = TRUE, main = "Zhu et al")
+o3 <- b3 %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "cell_types") %>%
+  mutate(cell_types = fct_recode(cell_types,
+    "Hepatocytes" = "Hepatocyte",
+    "PECs" = "Portal_endothelial_Cells",
+    "HSCs" = "Hepatic_Stellate_Cells",
+    "Mature B cells" = "Mature_B_Cells",
+    "NK like cells" = "NK_like_Cells",
+    "Plasma cells" = "Plasma_Cells",
+    "Macrophages" = "Macrophage",
+    "Erythroid cells" = "Erythroid_Cells",
+    "T cells" = "T_Cells"
+  )) %>%
+  ggplot(., aes(x = reorder(cell_types, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy, color = as.factor(cell_types))) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = cell_types, xend = cell_types, y = min(MeanDecreaseAccuracy), yend = MeanDecreaseAccuracy), lwd = 1.5) +
+  coord_flip() +
+  guides(colour = "none") +
+  ylab("Importance") +
+  xlab("") +
+  scale_y_continuous(expand = c(0, 0.5)) +
+  scale_color_viridis_d(option = "viridis", end = 0.97) +
+  ggtitle("Zhu et al. (2021)") +
+  theme_pubclean(base_size = 16, base_family = "Helvetica", flip = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"), panel.grid.minor = element_blank())
+
+# frontiers
+set.seed(5)
+rf_front <- randomForest(cond ~ ., data = frontiers_clean, proximity = TRUE, importance = TRUE) # , mtry = 2)
+b4 <- varImpPlot(rf_front, type = TRUE, main = "Block et al")
+o4 <- b4 %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "cell_types") %>%
+  mutate(cell_types = fct_recode(cell_types,
+    "Hepatocytes" = "Hepatocyte",
+    "PECs" = "Portal_endothelial_Cells",
+    "HSCs" = "Hepatic_Stellate_Cells",
+    "Mature B cells" = "Mature_B_Cells",
+    "NK like cells" = "NK_like_Cells",
+    "Plasma cells" = "Plasma_Cells",
+    "Macrophages" = "Macrophage",
+    "Erythroid cells" = "Erythroid_Cells",
+    "T cells" = "T_Cells"
+  )) %>%
+  ggplot(., aes(x = reorder(cell_types, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy, color = as.factor(cell_types))) +
+  geom_point(size = 4) +
+  geom_segment(aes(x = cell_types, xend = cell_types, y = min(MeanDecreaseAccuracy), yend = MeanDecreaseAccuracy), lwd = 1.5) +
+  coord_flip() +
+  guides(colour = "none") +
+  ylab("Importance") +
+  xlab("") +
+  scale_y_continuous(expand = c(0, 0.5), ) +
+  scale_color_viridis_d(option = "viridis", end = 0.97) +
+  ggtitle("Block et al. (2022)") +
+  theme_pubclean(base_size = 16, base_family = "Helvetica", flip = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"), panel.grid.minor = element_blank())
+
+o1
+o2
+o3
+o4
+```
+
+```{r}
+sessionInfo()
+```

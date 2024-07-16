@@ -1,0 +1,177 @@
+---
+title: "Deeper analysis of the influence of confounding factors; Figure 4.7"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+library(ggpubr)
+library(rstatix)
+library(glmnet)
+library(plotROC)
+library(pROC)
+```
+
+```{r setup, include=FALSE}
+theme_set(theme_classic(base_size = 18))
+```
+
+# Influence of donor/patient age on classification results per biological sex
+
+```{r age, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/cfdeconv_res.RData")
+load("./data/deconv_res_filt.RData")
+# data cleanup
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(c(cond, 29:39)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+
+# get the dataset data for which there is per-sample annotation available
+## therano
+therano_pd <- cfdeconv_log %>% dplyr::filter(dataset == "Zhu et al. (2021)")
+therano_meta_deconv$pred <- as.numeric(therano_pd$pred_class)
+## npj
+npj_meta_deconv$pred <- deconv_npj$pred_class
+
+# construct a unified df
+df <- data.frame(age = c(npj_meta_deconv$Age, therano_meta_deconv$age), gender = c(npj_meta_deconv$gender, therano_meta_deconv$gender), cond = c(npj_meta_deconv$cond, therano_meta_deconv$cond), pred = c(npj_meta_deconv$pred, therano_meta_deconv$pred)) %>% dplyr::mutate(pred = as.factor(ifelse(pred == 0, "HD", "LC")))
+
+# choose misclassified samples
+df1 <- df %>% dplyr::filter((cond == "HD" & pred == "LC") | (cond == "LC" & pred == "HD"))
+
+# stat tests; see if there is any bias in misclassified samples and the whole cohort
+stat.test <- df %>%
+  dplyr::group_by(gender) %>%
+  wilcox_test(age ~ cond, alternative = "t", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", paired = FALSE)
+stat.test_effect <- df %>%
+  dplyr::group_by(gender) %>%
+  wilcox_effsize(age ~ cond, alternative = "t", conf.level = 0.95, paired = FALSE, ci = TRUE, nboot = 100)
+stat.test1 <- df1 %>%
+  dplyr::group_by(gender) %>%
+  wilcox_test(age ~ cond, alternative = "t", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", paired = FALSE)
+stat.test_effect1 <- df1 %>%
+  dplyr::group_by(gender) %>%
+  wilcox_effsize(age ~ cond, alternative = "t", conf.level = 0.95, paired = FALSE, ci = TRUE, nboot = 100)
+stat.test2 <- df %>%
+  dplyr::group_by(cond) %>%
+  wilcox_test(age ~ gender, alternative = "t", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", paired = FALSE)
+stat.test_effect2 <- df %>%
+  dplyr::group_by(cond) %>%
+  wilcox_effsize(age ~ gender, alternative = "t", conf.level = 0.95, paired = FALSE, ci = TRUE, nboot = 100)
+stat.test3 <- df1 %>%
+  dplyr::group_by(cond) %>%
+  wilcox_test(age ~ gender, alternative = "t", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", paired = FALSE)
+stat.test_effect3 <- df1 %>%
+  dplyr::group_by(cond) %>%
+  wilcox_effsize(age ~ gender, alternative = "t", conf.level = 0.95, paired = FALSE, ci = TRUE, nboot = 100)
+
+# aggregate data; see if there is any biological sex-based bias in misclassified samples vs the whole cohort
+df$type <- "full"
+df1$type <- "mis"
+df3 <- rbind(df, df1)
+stat.test4 <- df3 %>%
+  dplyr::mutate(gender = factor(gender, levels = c("female", "male"))) %>%
+  dplyr::group_by(gender, cond) %>%
+  wilcox_test(age ~ type, alternative = "t", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", paired = FALSE)
+stat.test_effect4 <- df3 %>%
+  dplyr::mutate(gender = factor(gender, levels = c("female", "male"))) %>%
+  dplyr::group_by(gender, cond) %>%
+  wilcox_effsize(age ~ type, alternative = "t", conf.level = 0.95, paired = FALSE, ci = TRUE, nboot = 100)
+
+# export the data
+save(stat.test, stat.test_effect, stat.test1, stat.test_effect1, stat.test2, stat.test_effect2, stat.test3, stat.test_effect3, stat.test4, stat.test_effect4, file = "./data/age_stat.RData")
+```
+
+# Influence of sample collection date on classification results; Figure 4.7
+
+```{r bleed, fig.width= 15, fig.height=8, warning = FALSE}
+# load deconv results
+load("./data/deconv_res_filt.RData")
+# load the saved model
+load("./data/deconv_logmodel.RData")
+# bleed dates
+frontiers_meta_deconv$bleed <- as.character(frontiers_meta_deconv$bleed)
+frontiers_meta_deconv <- frontiers_meta_deconv %>% dplyr::rename(bleed_date = bleed)
+# partition and analysis of bleed dates
+## transform the bleed date of LC samples samples to corresponding LC EV samples (as they had been sourced from same LC patients)
+frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC001M", "bleed_date"] <- frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC001", "bleed_date"]
+frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC007M", "bleed_date"] <- frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC007", "bleed_date"]
+frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC004M", "bleed_date"] <- frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC004", "bleed_date"]
+frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC006M", "bleed_date"] <- frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC006", "bleed_date"]
+frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC101M", "bleed_date"] <- frontiers_meta_deconv[frontiers_meta_deconv$id == "HCC101", "bleed_date"]
+# data cleanup
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# model performance all samples
+npj_frontiers <- predict(elnet_npj, as.matrix(frontiers_clean[, -which(names(frontiers_clean) %in% c("cond"))]), type = "response")
+pd_front <- ifelse(npj_frontiers[, 1] < best_thr$threshold, "0", "1")
+frontiers_clean$pred <- pd_front
+frontiers_clean$prob <- npj_frontiers[, 1]
+# filter all samples with bleed date older than 2011
+frontiers_clean_2010 <- frontiers_clean %>% dplyr::filter(frontiers_meta_deconv$bleed_date > "2010-12-31" | is.na(frontiers_meta_deconv$bleed_date == "NA"))
+roc_frontiers_2010 <- roc(as.numeric(frontiers_clean_2010$cond == "LC"), frontiers_clean_2010$prob, plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, levels = c(0, 1), direction = "<", main = "npj-elife (elnet)")
+# filter all samples with bleed date older than 2017
+frontiers_clean_2016 <- frontiers_clean %>% dplyr::filter(frontiers_meta_deconv$bleed_date > "2016-12-31" | is.na(frontiers_meta_deconv$bleed_date == "NA"))
+roc_frontiers_2016 <- roc(as.numeric(frontiers_clean_2016$cond == "LC"), frontiers_clean_2016$prob, plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, levels = c(0, 1), direction = "<")
+# aggregate results
+all_roc <- data.frame(resp = as.factor(c(frontiers_clean$cond, frontiers_clean_2010$cond, frontiers_clean_2016$cond)), pred = c(frontiers_clean$prob, frontiers_clean_2010$prob, frontiers_clean_2016$prob), dataset = c(rep("full dataset", times = nrow(frontiers_clean)), rep("bleed date > 2010-12-31", times = nrow(frontiers_clean_2010)), rep("bleed date > 2016-12-31", nrow(frontiers_clean_2016)))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("full dataset", "bleed date > 2010-12-31", "bleed date > 2016-12-31")))
+
+# plot results
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  theme_pubr(base_size = 20, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("full dataset", "bleed date > 2010-12-31", "bleed date > 2016-12-31"))) %>%
+  dplyr::mutate(n_dataset = paste0("(", "n =", " ", table(all_roc$dataset), ")"))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_text(data = b, aes(x = dataset, y = AUC + 0.15, label = n_dataset), color = "black", size = 4.65) +
+  geom_text(aes(label = AUC), nudge_y = 0.05, color = "black", size = 4.65) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 15, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 16), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+# combine plots
+date_model <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+# export
+ggsave(plot = date_model, file = "./figures/fig4_7.png", units = "mm", height = 270, width = 540, scaling = 1, limitsize = FALSE, dpi = 300)
+```
+
+```{r}
+sessionInfo()
+```

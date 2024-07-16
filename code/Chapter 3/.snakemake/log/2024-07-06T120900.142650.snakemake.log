@@ -1,0 +1,57 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 20
+Rules claiming more threads will be scaled down.
+Job stats:
+job         count
+--------  -------
+all             1
+fig3_2          1
+fig3_3_7        1
+fig3_8          1
+total           4
+
+Select jobs to execute...
+Failed to solve scheduling problem with ILP solver. Falling back to greedy solver. Run Snakemake with --verbose to see the full solver output for debugging the problem.
+
+[Sat Jul  6 12:09:12 2024]
+rule fig3_2:
+    input: markdown_results/cf_wgcna_suppl_file2.html, markdown_results/exo_wgcna_suppl_file3.html
+    output: markdown_results/fig3_2.html
+    jobid: 11
+    reason: Code has changed since last execution
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 12:09:12 2024]
+rule fig3_3_7:
+    input: markdown_results/cfrna_input_clean.html
+    output: markdown_results/fig3_3_7.html
+    jobid: 1
+    reason: Code has changed since last execution
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 12:09:14 2024]
+Error in rule fig3_3_7:
+    jobid: 1
+    input: markdown_results/cfrna_input_clean.html
+    output: markdown_results/fig3_3_7.html
+
+[Sat Jul  6 12:09:14 2024]
+Error in rule fig3_2:
+    jobid: 11
+    input: markdown_results/cf_wgcna_suppl_file2.html, markdown_results/exo_wgcna_suppl_file3.html
+    output: markdown_results/fig3_2.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 65:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpsdad81r6.fig3_3_7.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_3_7.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpsdad81r6.fig3_3_7.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 65, in __rule_fig3_3_7
+  File "/home/si48met/miniconda3/envs/cfwgcna_final/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 102:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuen77qhh.fig3_2.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_2.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuen77qhh.fig3_2.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 102, in __rule_fig3_2
+  File "/home/si48met/miniconda3/envs/cfwgcna_final/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-06T120900.142650.snakemake.log

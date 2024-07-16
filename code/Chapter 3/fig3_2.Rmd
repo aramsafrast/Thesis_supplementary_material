@@ -1,0 +1,84 @@
+---
+title: "Generation of Figure 3.2"
+subtitle: "Data of Zhu et al. https://doi.org/10.7150%2Fthno.48206 & Li et al. https://doi.org/10.1093/nar/gkx891"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r global_options, echo = F}
+knitr::opts_chunk$set(fig.path = "markdown_results/")
+```
+
+# load libraries
+***
+
+```{r libraries, message=F, warning=F}
+library(dplyr)
+library(stringr)
+library(cowplot)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(magick)
+library(ragg)
+library(ggpubr)
+```
+
+# Generation of Figure 3.2
+***
+
+```{r fig3_2, warning=F, message=F, fig.width= 25, fig.height=20, fig.align='center'}
+# load data
+load("./cfrna/results/wgcna_main/cfwgcna.RData")
+load("./exorna/results/wgcna_main/exowgcna.RData")
+# aggregate cfRNA WGCNA results
+cfmerged <- as.data.frame(table(cfmergedcolors)) %>%
+  dplyr::mutate(cfmergedcolors = factor(cfmergedcolors, levels = rev(c("cf-turquoise", "cf-blue", "cf-brown", "cf-black", "cf-yellow", "cf-red", "cf-magenta", "cf-purple", "grey")))) %>%
+  arrange(desc(Freq)) %>%
+  mutate(col = rev(str_remove(cfmergedcolors, "cf-")))
+# plot
+cfrna_bar <- ggplot(cfmerged, aes(x = cfmergedcolors, y = Freq, fill = cfmergedcolors)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = as.character(cfmerged$col)) +
+  geom_text(aes(label = Freq), vjust = 0.5, nudge_y = max(cfmerged$Freq) * 0.03, size = 7, family = "Arial") +
+  ggtitle("Number of genes in cfRNA modules") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 4900)) +
+  theme_pubclean(base_size = 26, base_family = "Arial", flip = T) +
+  theme(legend.position = "None", panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank(), axis.title = element_blank(), plot.title = element_text(color = "black", size = 28, face = "bold", hjust = 0.5), text = element_text(family = "Arial", size = 26))
+
+# aggregate exoRNA WGCNA results
+exomerged <- as.data.frame(table(exomergedcolors)) %>%
+  dplyr::mutate(exomergedcolors = factor(exomergedcolors, levels = c("exo-turquoise", "grey", "exo-blue", "exo-brown", "exo-yellow", "exo-green", "exo-red"))) %>%
+  arrange(desc(Freq)) %>%
+  mutate(col = str_remove(exomergedcolors, "exo-"))
+# plot
+exorna_bar <- ggplot(exomerged, aes(x = reorder(exomergedcolors, Freq), y = Freq, fill = exomergedcolors)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = as.character(exomerged$col)) +
+  geom_text(aes(label = Freq), vjust = 0.5, nudge_y = max(exomerged$Freq) * 0.03, size = 7, family = "Arial") +
+  ggtitle("Number of genes in exoRNA modules") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 5400)) +
+  theme_pubclean(base_size = 26, base_family = "Arial", flip = T) +
+  theme(legend.position = "None", panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank(), axis.title = element_blank(), plot.title = element_text(color = "black", size = 28, face = "bold", hjust = 0.5), text = element_text(family = "Arial", size = 26))
+cfrna_bar
+exorna_bar
+```
+
+```{r}
+sessionInfo()
+```

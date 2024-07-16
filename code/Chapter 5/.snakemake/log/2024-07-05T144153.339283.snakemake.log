@@ -1,0 +1,36 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job                  count
+-----------------  -------
+all                      1
+cell_interactions        1
+lri_detection            1
+panel                    1
+total                    4
+
+Select jobs to execute...
+
+[Fri Jul  5 14:41:54 2024]
+rule lri_detection:
+    output: lri_detection_fig5_1_suppl_fil7.html
+    jobid: 3
+    reason: Missing output files: lri_detection_fig5_1_suppl_fil7.html
+    threads: 15
+    resources: tmpdir=/tmp
+
+[Fri Jul  5 15:25:42 2024]
+Error in rule lri_detection:
+    jobid: 3
+    output: lri_detection_fig5_1_suppl_fil7.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/snakemake_pipeline, line 13:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/.snakemake/scripts/tmpsmkpkcqj.lri_detection_fig5_1_suppl_fil7.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/lri_detection_fig5_1_suppl_fil7.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/.snakemake/scripts/tmpsmkpkcqj.lri_detection_fig5_1_suppl_fil7.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/snakemake_pipeline", line 13, in __rule_lri_detection
+  File "/home/si48met/miniconda3/envs/cflri_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-05T144153.339283.snakemake.log

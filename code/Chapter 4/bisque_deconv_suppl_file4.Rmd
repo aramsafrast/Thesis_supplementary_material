@@ -1,0 +1,169 @@
+---
+title: "SC-based Bisque deconvolution & Suppl. File 4"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries
+library(tidyverse)
+library(BisqueRNA)
+library(Seurat)
+library(Biobase)
+library(readxl)
+library(openxlsx)
+```
+
+```{r setup, include=FALSE}
+theme_set(theme_classic(base_size = 18))
+```
+
+
+# Download the single-cell reference dataset
+
+```{bash download, message=F, warning=F}
+#get the data
+wget -q -O - https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115469/suppl/GSE115469%5FData.csv.gz | gunzip -c > ./data/scrna_countm.csv
+#get the metadata
+wget -q -O - https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115469/suppl/GSE115469%5FCellClusterType.txt.gz | gunzip -c > ./data/scrna_metadata_init.txt
+```
+
+# Create single-cell reference
+
+```{r sc_ref, fig.width= 15, fig.height=8}
+# load the downloaded data
+scrna_countm <- read.csv("./data/scrna_countm.csv")
+scrna_metadata_init <- read.delim("./data/scrna_metadata_init.txt")
+# collapse the cell subtypes
+scrna_metadata_init$CellType <- ifelse(grepl("Hepatocyte", scrna_metadata_init$CellType), "Hepatocyte", scrna_metadata_init$CellType)
+scrna_metadata_init$CellType <- ifelse(grepl("T_Cells", scrna_metadata_init$CellType), "T_Cells", scrna_metadata_init$CellType)
+scrna_metadata_init$CellType <- ifelse(grepl("LSECs", scrna_metadata_init$CellType), "LSECs", scrna_metadata_init$CellType)
+scrna_metadata_init$CellType <- ifelse(grepl("Macrophage", scrna_metadata_init$CellType), "Macrophage", scrna_metadata_init$CellType)
+# clean the data
+scrna_countm <- scrna_countm %>% column_to_rownames(., var = "X")
+rownames(scrna_metadata_init) <- scrna_metadata_init$CellName
+# create a Seurat object
+seurat_sc <- CreateSeuratObject(scrna_countm, meta.data = scrna_metadata_init)
+temp_sc <- seurat_sc@meta.data %>% dplyr::select(Sample, CellType)
+sample.ids <- colnames(as.matrix(seurat_sc@assays$RNA@counts))
+# prepare to transform the data into AnnotatedDataFrame format which is required by Bisque
+individual.labels <- temp_sc$Sample
+cell.type.labels <- temp_sc$CellType
+# individual.ids and cell.types should be in the same order as in sample.ids
+sc.meta <- data.frame(
+  labelDescription = c(
+    "SubjectName",
+    "cellType"
+  ),
+  row.names = c(
+    "SubjectName",
+    "cellType"
+  )
+)
+sc.pheno <- data.frame(
+  check.names = F, check.rows = F,
+  stringsAsFactors = F,
+  row.names = sample.ids,
+  SubjectName = individual.labels,
+  cellType = cell.type.labels
+)
+sc.pdata <- new("AnnotatedDataFrame",
+  data = sc.pheno,
+  varMetadata = sc.meta
+)
+sc.eset <- Biobase::ExpressionSet(assayData = as.matrix(seurat_sc@assays$RNA@counts), phenoData = sc.pdata)
+rm(seurat_sc, scrna_countm, temp_sc)
+gc()
+# save the data just in case
+save(sc.eset, file = "./data/scrna_input.RData")
+```
+
+# Deconvolution (only NCH and LC)
+
+```{r deconv_filt, fig.width= 15, fig.height=8}
+# load the cfRNA data
+load("./data/cfinput_clean_filt.RData")
+# elife
+## transform into a suitable format and deconvolute
+elife.eset <- Biobase::ExpressionSet(assayData = as.matrix(elife_countm_filt))
+elife_deconv <- BisqueRNA::ReferenceBasedDecomposition(elife.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+gc()
+# combine the resulting cell type proportion with the metadata
+elife_res <- as.data.frame(t(elife_deconv$bulk.props))
+elife_meta_deconv_filt <- cbind(elife_meta_filt, elife_res)
+
+# therano; same steps
+therano.eset <- Biobase::ExpressionSet(assayData = as.matrix(therano_countm))
+therano_deconv <- BisqueRNA::ReferenceBasedDecomposition(therano.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+gc()
+therano_res <- as.data.frame(t(therano_deconv$bulk.props))
+therano_meta_deconv <- cbind(therano_meta, therano_res)
+
+# npj; same steps
+npj.eset <- Biobase::ExpressionSet(assayData = as.matrix(npj_batch))
+npj_deconv <- BisqueRNA::ReferenceBasedDecomposition(npj.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+gc()
+npj_res <- as.data.frame(t(npj_deconv$bulk.props))
+npj_meta_deconv <- cbind(npj_meta, npj_res)
+
+# frontiers; same steps
+frontiers.eset <- Biobase::ExpressionSet(assayData = as.matrix(frontiers_countm))
+frontiers_deconv <- BisqueRNA::ReferenceBasedDecomposition(frontiers.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+gc()
+frontiers_res <- as.data.frame(t(frontiers_deconv$bulk.props))
+frontiers_meta_deconv <- cbind(frontiers_meta, frontiers_res)
+
+# export results
+save(elife_meta_deconv_filt, therano_meta_deconv, npj_meta_deconv, frontiers_meta_deconv, file = "./data/deconv_res_filt.RData")
+```
+
+# Deconvolution (all; elife)
+
+```{r deconv_all, fig.width= 15, fig.height=8}
+# load cfRNA elife all samples data
+load("./data/cfinput_clean_all.RData")
+
+# elife all; same steps as previously
+elife.eset <- Biobase::ExpressionSet(assayData = as.matrix(elife_countm_all))
+elife_deconv <- BisqueRNA::ReferenceBasedDecomposition(elife.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+gc()
+elife_res <- as.data.frame(t(elife_deconv$bulk.props))
+elife_meta_deconv_all <- cbind(elife_meta_all, elife_res)
+
+# export
+save(elife_meta_deconv_all, therano_meta_deconv, npj_meta_deconv, frontiers_meta_deconv, file = "./data/deconv_res_all.RData")
+
+# export the datasets
+elife_filt_save <- elife_meta_deconv_filt
+elife_all_save <- elife_meta_deconv_all
+therano_save <- therano_meta_deconv %>% dplyr::select(-c(2:7))
+npj_save <- npj_meta_deconv %>%
+  dplyr::select(c(cond, 29:39)) %>%
+  rownames_to_column(var = "samples")
+frontiers_save <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48)) %>%
+  rownames_to_column(var = "samples")
+
+# suppl. file 4
+list_of_datasets <- list("Chen et al. (filt) deconv." = elife_filt_save, "Chen et al. (all) deconv." = elife_all_save, "Zhu et al. deconv." = therano_save, "Roskams-Hieter et al. deconv." = npj_save, "Block et al. deconv." = frontiers_save)
+write.xlsx(list_of_datasets, file = "./tables/Supplementary File 4 - Results of cell deconvolution.xlsx")
+```
+
+```{r}
+sessionInfo()
+```

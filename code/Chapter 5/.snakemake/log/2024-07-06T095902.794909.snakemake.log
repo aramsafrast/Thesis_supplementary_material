@@ -1,0 +1,49 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 30
+Rules claiming more threads will be scaled down.
+Job stats:
+job                  count
+-----------------  -------
+all                      1
+cell_interactions        1
+panel                    1
+total                    3
+
+Select jobs to execute...
+
+[Sat Jul  6 09:59:04 2024]
+rule panel:
+    input: lri_detection_fig5_1_suppl_fil7.html
+    output: panel_figs5_2_3_supplfile8.html
+    jobid: 2
+    reason: Missing output files: panel_figs5_2_3_supplfile8.html
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 09:59:54 2024]
+Finished job 2.
+1 of 3 steps (33%) done
+Select jobs to execute...
+
+[Sat Jul  6 09:59:54 2024]
+rule cell_interactions:
+    input: panel_figs5_2_3_supplfile8.html
+    output: cell_interactions_fig5_4_supplfile_9.html
+    jobid: 1
+    reason: Missing output files: cell_interactions_fig5_4_supplfile_9.html; Input files updated by another job: panel_figs5_2_3_supplfile8.html
+    resources: tmpdir=/tmp
+
+[Sat Jul  6 10:00:20 2024]
+Error in rule cell_interactions:
+    jobid: 1
+    input: panel_figs5_2_3_supplfile8.html
+    output: cell_interactions_fig5_4_supplfile_9.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/snakemake_pipeline, line 29:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/.snakemake/scripts/tmpnz8z1y81.cell_interactions_fig5_4_supplfile_9.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/cell_interactions_fig5_4_supplfile_9.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/.snakemake/scripts/tmpnz8z1y81.cell_interactions_fig5_4_supplfile_9.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 5/snakemake_pipeline", line 29, in __rule_cell_interactions
+  File "/home/si48met/miniconda3/envs/cflri_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-06T095902.794909.snakemake.log

@@ -1,0 +1,49 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job             count
+------------  -------
+all                 1
+conf_factors        1
+suppl_files         1
+total               3
+
+Select jobs to execute...
+
+[Thu Jul  4 20:34:17 2024]
+rule conf_factors:
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html
+    output: conf_factors_fig4_7.html
+    jobid: 6
+    reason: Missing output files: conf_factors_fig4_7.html
+    resources: tmpdir=/tmp
+
+[Thu Jul  4 20:34:43 2024]
+Finished job 6.
+1 of 3 steps (33%) done
+Select jobs to execute...
+
+[Thu Jul  4 20:34:43 2024]
+rule suppl_files:
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html, conf_factors_fig4_7.html, bio_insights_fig4_4_5.html
+    output: suppl_files1_4_5.html
+    jobid: 1
+    reason: Missing output files: suppl_files1_4_5.html; Input files updated by another job: conf_factors_fig4_7.html
+    resources: tmpdir=/tmp
+
+[Thu Jul  4 20:34:51 2024]
+Error in rule suppl_files:
+    jobid: 1
+    input: deconv_analysis_fig2_3fig4_2_3_6_9.html, conf_factors_fig4_7.html, bio_insights_fig4_4_5.html
+    output: suppl_files1_4_5.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline, line 65:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmptxhaxlsc.suppl_files1_4_5.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/suppl_files1_4_5.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmptxhaxlsc.suppl_files1_4_5.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline", line 65, in __rule_suppl_files
+  File "/home/si48met/miniconda3/envs/cfdeconv_lc/lib/python3.10/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-04T203416.191237.snakemake.log

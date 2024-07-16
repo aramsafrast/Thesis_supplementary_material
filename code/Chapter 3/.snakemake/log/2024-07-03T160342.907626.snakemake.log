@@ -1,0 +1,129 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job               count
+--------------  -------
+all                   1
+fig3_4_5_10_12        1
+fig3_8                1
+fig3_9_11             1
+metacells             1
+module_pres_sc        1
+total                 6
+
+Resources before job selection: {'_cores': 15, '_nodes': 9223372036854775807}
+Ready jobs (3)
+Select jobs to execute...
+Failed to solve scheduling problem with ILP solver. Falling back to greedy solver. Run Snakemake with --verbose to see the full solver output for debugging the problem.
+Selected jobs (2)
+Resources after job selection: {'_cores': 13, '_nodes': 9223372036854775805}
+
+[Wed Jul  3 16:03:44 2024]
+rule fig3_4_5_10_12:
+    input: markdown_results/cf_wgcna_suppl_file2.html, markdown_results/exo_wgcna_suppl_file3.html
+    output: markdown_results/fig3_4_5_10_12.html
+    jobid: 3
+    reason: Missing output files: markdown_results/fig3_4_5_10_12.html
+    resources: tmpdir=/tmp
+
+[Wed Jul  3 16:03:44 2024]
+rule metacells:
+    output: markdown_results/metacell_construct_fig2_2.html
+    jobid: 10
+    reason: Missing output files: markdown_results/metacell_construct_fig2_2.html
+    resources: tmpdir=/tmp
+
+Full Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2656, in run_wrapper
+    run(
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 184, in __rule_fig3_4_5_10_12
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 1567, in script
+    executor.evaluate()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 455, in evaluate
+    self.execute_script(fd.name, edit=edit)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 909, in execute_script
+    self._execute_cmd(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 486, in _execute_cmd
+    return shell(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/shell.py", line 294, in __new__
+    raise sp.CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_4_5_10_12.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd"))'' returned non-zero exit status 1.
+
+[Wed Jul  3 16:04:53 2024]
+Error in rule fig3_4_5_10_12:
+    jobid: 3
+    input: markdown_results/cf_wgcna_suppl_file2.html, markdown_results/exo_wgcna_suppl_file3.html
+    output: markdown_results/fig3_4_5_10_12.html
+
+Full Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2656, in run_wrapper
+    run(
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 184, in __rule_fig3_4_5_10_12
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 1567, in script
+    executor.evaluate()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 455, in evaluate
+    self.execute_script(fd.name, edit=edit)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 909, in execute_script
+    self._execute_cmd(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/script.py", line 486, in _execute_cmd
+    return shell(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/shell.py", line 294, in __new__
+    raise sp.CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_4_5_10_12.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd"))'' returned non-zero exit status 1.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 715, in _callback
+    raise ex
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 699, in cached_or_run
+    run_func(*args)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 2692, in run_wrapper
+    raise RuleException(
+snakemake.exceptions.RuleException: CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 73:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_4_5_10_12.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 73, in __rule_fig3_4_5_10_12
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline, line 73:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/markdown_results/fig3_4_5_10_12.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/.snakemake/scripts/tmpuhjq1g4p.fig3_4_5_10_12.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 3/snakemake_pipeline", line 73, in __rule_fig3_4_5_10_12
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 58, in run
+Terminating processes on user request, this might take some time.
+Full Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/scheduler.py", line 546, in schedule
+    self._open_jobs.acquire()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/threading.py", line 443, in acquire
+    self._cond.wait(timeout)
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/threading.py", line 312, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/__init__.py", line 792, in snakemake
+    success = workflow.execute(
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/workflow.py", line 1242, in execute
+    success = self.scheduler.schedule()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/scheduler.py", line 641, in schedule
+    self._executor.cancel()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/site-packages/snakemake/executors/__init__.py", line 707, in cancel
+    self.pool.shutdown()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/concurrent/futures/thread.py", line 235, in shutdown
+    t.join()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/threading.py", line 1053, in join
+    self._wait_for_tstate_lock()
+  File "/home/si48met/miniconda3/envs/cfwgcna_lc/lib/python3.9/threading.py", line 1073, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+KeyboardInterrupt
+
+Cancelling snakemake on user request.
+unlocking
+removing lock
+removing lock
+removed all locks

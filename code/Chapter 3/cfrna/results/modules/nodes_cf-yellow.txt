@@ -1,0 +1,10 @@
+nodeName	altName	nodeAttr[nodesPresent, ]
+MDN1	NA	cf-yellow
+RUNX2	NA	cf-yellow
+WDFY4	NA	cf-yellow
+OGT	NA	cf-yellow
+UGCG	NA	cf-yellow
+ADPGK	NA	cf-yellow
+CIITA	NA	cf-yellow
+TCF4	NA	cf-yellow
+MPEG1	NA	cf-yellow

@@ -1,0 +1,556 @@
+---
+title: "Cell deconvolution results analysis/modelling; Figures 2.3, 4.2, 4.3, 4.6 & 4.9"
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r pkgs, message=F, warning=F}
+# load libraries and package with custom made changes
+library(ggrepel)
+library(randomForest)
+library(edgeR)
+library(tidyverse)
+library(caret)
+library(pROC)
+library(glmnet)
+library(readr)
+library(tidyverse)
+library(ggfortify)
+library(ggpubr)
+library(rstatix)
+library(DescTools)
+library(ggcorrplot)
+library(plotROC)
+library(patchwork)
+library(cvms)
+library(DT)
+library(scales)
+library(epiR)
+```
+
+```{r setup, include=FALSE}
+theme_set(theme_classic(base_size = 18))
+```
+
+# Figure 4.2
+
+```{r, fig4_2, fig.width= 15, fig.height=8, warning = FALSE}
+# load data; here we use elife dataset with all samples
+load("./data/deconv_res_all.RData")
+# combine all the results
+elife_clean <- elife_meta_deconv_all %>%
+  dplyr::select(-c(samples))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(cond, c(29:39))
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48))
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7))
+merged <- rbind(npj_clean, elife_clean, therano_clean, frontiers_clean)
+merged$dataset <- c(rep("npj", 58), rep("elife", 230), rep("therano", 65), rep("frontiers", 25))
+merged$dataset <- factor(merged$dataset, levels = c("npj", "elife", "therano", "frontiers"))
+merged$cond <- factor(merged$cond, levels = c("HD", "LC", "CRC", "ESCA", "LUAD", "STAD"))
+
+# test hepatocyte proportion differences
+stat.test <- merged %>%
+  dplyr::group_by(dataset) %>%
+  wilcox_test(Hepatocyte ~ cond, alternative = "g", exact = TRUE, conf.level = 0.95, p.adjust.method = "BH", ref.group = "LC", paired = FALSE)
+stat.test_effect <- merged %>%
+  dplyr::group_by(dataset) %>%
+  wilcox_effsize(Hepatocyte ~ cond, alternative = "g", conf.level = 0.95, ref.group = "LC", paired = FALSE, ci = TRUE, nboot = 100)
+cols <- c("HD" = "darkgreen", "LC" = "red", "CRC" = "azure4", "LUAD" = "blue", "ESCA" = "grey", "STAD" = "blueviolet")
+# plot results (Figure 4.2)
+bxp <- ggboxplot(
+  merged,
+  x = "dataset", y = "Hepatocyte",
+  yaxt = "n",
+  color = "cond",
+  add = "jitter",
+  add.params = list(alpha = 0.3)
+) + scale_y_continuous(breaks = c(0, 0.1, 0.25, 0.5, 0.75, 0.9)) + ylab("Hepatocyte proportion") + scale_color_manual(values = cols, name = "condition") + scale_x_discrete(labels = c("Roskams-Hieter et al. (2022)", "Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)")) + theme_pubclean(base_size = 24, base_family = "Helvetica") + guides(colour = guide_legend(nrow = 1)) + theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.caption = element_text(size = 14, hjust = 1, vjust = 0, face = "italic", color = "black"))
+stat.test <- stat.test %>%
+  add_xy_position(x = "dataset", dodge = 0.8)
+p0 <- bxp + stat_pvalue_manual(stat.test, label = "{p.adj.signif}", size = 7, family = "Helvetica")
+
+# export plot
+ggsave(plot = p0, file = "./figures/fig4_2.png", units = "mm", device = ragg::agg_png, height = 300, width = 500, scaling = 0.9, limitsize = FALSE, dpi = 400, bg = "transparent")
+
+# export the test results
+hepato_stat <- stat.test
+hepato_effect <- stat.test_effect
+save(hepato_stat, hepato_effect, file = "./data/hepato_test.RData")
+```
+
+# Hepatocyte proportion based binarization; Figure 4.3
+
+```{r, hep_bi, fig.width= 15, fig.height=8, warning = FALSE}
+# load the results; elife dataset only with HD and LC samples
+load("./data/deconv_res_filt.RData")
+# clean up datasets
+elife_clean <- elife_meta_deconv_filt %>%
+  dplyr::select(-c(samples)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(c(cond, 29:39)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+# merge
+merged <- rbind(npj_clean, elife_clean, therano_clean, frontiers_clean)
+merged$dataset <- c(rep("npj", 58), rep("elife", 73), rep("therano", 65), rep("frontiers", 25))
+merged$dataset <- factor(merged$dataset, levels = c("npj", "elife", "therano", "frontiers"))
+merged$cond <- factor(merged$cond, levels = c("HD", "LC"))
+
+# determine optimal hepatocyte proportion cut-off
+acc_vec <- c()
+sense_vec <- c()
+spec_vec <- c()
+for (i in c(20:40) / 100) {
+  merged$pred <- ifelse(merged$Hepatocyte < i, "HD", "LC")
+  conf_mat <- confusionMatrix(data = as.factor(as.numeric(merged$pred == "LC")), reference = as.factor(as.numeric(merged$cond == "LC")), positive = "1")
+  acc_vec <- c(acc_vec, conf_mat$overall["Accuracy"])
+  sense_vec <- c(sense_vec, conf_mat$byClass["Sensitivity"])
+  spec_vec <- c(spec_vec, conf_mat$byClass["Specificity"])
+}
+
+# aggregate results and plot
+z1 <- data.frame(prop = c(20:40) / 100, acc = acc_vec, sense = sense_vec, spec = spec_vec) %>%
+  pivot_longer(names_to = "metrics", values_to = "values", !prop) %>%
+  ggplot(., aes(x = prop, y = values, colour = metrics)) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10), expand = c(0.01, 0.01), name = "Hepatocyte proportion cutoff") +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10), expand = c(0.01, 0.01), name = NULL) +
+  scale_color_manual(labels = c("Accuracy", "Sensitivity", "Specificity"), values = c("grey", "red", "blue"), guide = guide_legend()) +
+  geom_vline(xintercept = 0.27, linetype = "dashed") +
+  ggplot2::theme_minimal(base_size = 18, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), axis.text.x = element_text(angle = 30, family = "Helvetica", hjust = 1, vjust = 1), panel.grid.minor = element_blank()) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+# 0.27 is the optimal cut-off
+merged$pred <- ifelse(merged$Hepatocyte < 0.27, "HD", "LC")
+eval <- evaluate(merged,
+  target_col = "cond",
+  prediction_cols = "pred",
+  type = "binomial"
+)
+# create a confusion matrix
+conf_mat <- eval$`Confusion Matrix`[[1]]
+z2 <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = cvms::font(size = 9, color = "black"), font_col_percentages = cvms::font(size = 5.5, color = "black"), font_row_percentages = cvms::font(size = 5.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+
+# merge the plots
+z1
+z2
+
+# export the predicted condition based on cut-off  results
+hepato <- merged
+save(hepato, file = "./data/hepato_res.RData")
+```
+
+# Logistic regression modelling; Figure 4.6
+
+```{r, log_model, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/deconv_res_filt.RData")
+# data cleanup
+elife_clean <- elife_meta_deconv_filt %>%
+  dplyr::select(-c(samples)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(c(cond, 29:39)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+
+# hyperparameter tuning
+set.seed(1)
+cv_5_5 <- trainControl(method = "repeatedcv", number = 5, repeats = 5, classProbs = TRUE, summaryFunction = twoClassSummary, savePredictions = "final")
+tunegrid <- expand.grid(
+  alpha = seq(0, 1, length = 20),
+  lambda = c(seq(0.00001, 1, length = 50), 5, 10)
+)
+elnet_npj_tune <- caret::train(
+  cond ~ .,
+  data = npj_clean,
+  method = "glmnet",
+  trControl = cv_5_5,
+  tunelength = 10,
+  tuneGrid = tunegrid,
+  standardize = TRUE,
+  metric = "ROC"
+)
+# best values
+elnet_npj_tune$bestTune
+# roc plot with cross-validated results
+roc_df <- roc(as.numeric(npj_clean$cond == "LC"), aggregate(LC ~ rowIndex, elnet_npj_tune$pred, mean)[, "LC"], plot = T, print.thres = T, print.auc = TRUE, ci = TRUE, direction = "<", levels = c(0, 1))
+# build a model with reported hyperparameters
+npj_clean_tr <- npj_clean %>% dplyr::mutate(cond = ifelse(cond == "LC", 1, 0))
+mm_npj <- model.matrix(npj_clean_tr$cond ~ ., data = npj_clean_tr) %>% .[, -1]
+elnet_npj <- glmnet(x = mm_npj, y = npj_clean_tr$cond, alpha = elnet_npj_tune$bestTune$alpha, family = "binomial", lambda = elnet_npj_tune$bestTune$lambda, standardize = TRUE)
+# model coefficients
+datatable(as.matrix(coef(elnet_npj)), caption = "Unscaled coefficients of logistic model trained on Roskams-Hieter et al. dataset")
+# apply the model on itself and determine optimal probability cut-off
+npj_npj <- predict(elnet_npj, newx = as.matrix(npj_clean_tr[, -which(names(npj_clean_tr) %in% c("cond"))]), type = "response")
+roc_npj <- roc(as.numeric(npj_clean_tr$cond == "1"), as.numeric(npj_npj), plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, main = "Model applied to train dataset - only used for optimal cut-off calculation", direction = "<", levels = c(0, 1))
+best_thr <- coords(roc_npj, "best", best.method = "youden")
+# get the assigned categories with the corss-validated results
+pd_npj <- ifelse(aggregate(LC ~ rowIndex, elnet_npj_tune$pred, mean)[, "LC"] < best_thr$threshold, 0, 1)
+# apply the model to elife
+npj_elife <- predict(elnet_npj, as.matrix(elife_clean[, -which(names(elife_clean) %in% c("cond"))]), type = "response")
+roc_elife <- roc(as.numeric(elife_clean$cond == "LC"), npj_elife[, 1], plot = F, print.auc = TRUE, ci = TRUE, main = "npj-elife (elnet)", levels = c(0, 1), direction = "<")
+pd_elife <- ifelse(npj_elife[, 1] < best_thr$threshold, "0", "1")
+# apply the model to theranositcs
+npj_therano <- predict(elnet_npj, as.matrix(therano_clean[, -which(names(therano_clean) %in% c("cond"))]), type = "response")
+roc_therano <- roc(as.numeric(therano_clean$cond == "LC"), npj_therano[, 1], plot = F, print.auc = TRUE, ci = TRUE, main = "npj-therano (elnet)", levels = c(0, 1), direction = "<")
+pd_therano <- ifelse(npj_therano[, 1] < best_thr$threshold, "0", "1")
+# apply the model to frontiers
+npj_frontiers <- predict(elnet_npj, as.matrix(frontiers_clean[, -which(names(frontiers_clean) %in% c("cond"))]), type = "response")
+roc_frontiers <- roc(as.numeric(frontiers_clean$cond == "LC"), npj_frontiers[, 1], plot = F, print.auc = TRUE, ci = TRUE, main = "npj-frontiers (elnet)", levels = c(0, 1), direction = "<")
+pd_front <- ifelse(npj_frontiers[, 1] < best_thr$threshold, "0", "1")
+
+# aggregate the data
+all_roc <- data.frame(resp = as.factor(c(elife_clean$cond, therano_clean$cond, frontiers_clean$cond, c(elife_clean$cond, therano_clean$cond, frontiers_clean$cond))), pred = c(npj_elife[, 1], npj_therano[, 1], npj_frontiers[, 1], c(npj_elife[, 1], npj_therano[, 1], npj_frontiers[, 1])), dataset = c(rep("Chen et al. (2022)", times = nrow(elife_clean)), rep("Zhu et al. (2021)", nrow(therano_clean)), rep("Block et al. (2022)", times = nrow(frontiers_clean)), c(rep("Total", times = nrow(elife_clean) + nrow(therano_clean) + nrow(frontiers_clean))))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+total_roc <- all_roc %>% dplyr::filter(dataset == "Total")
+roc_all <- roc(response = total_roc$resp, predictor = total_roc$pred, levels = c("0", "1"), direction = "<", plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE)
+cols <- c("Chen et al. (2022)" = "darkkhaki", "Zhu et al. (2021)" = "darkgoldenrod3", "Block et al. (2022)" = "darkmagenta", "Total" = "cornflowerblue")
+# plot the results
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 15), guide = guide_legend()) +
+  # ggtitle("Targeted cellular deconvolution") +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2), conf_low = c(roc_elife$ci[1], roc_therano$ci[1], roc_frontiers$ci[1], roc_all$ci[1]), conf_high = c(roc_elife$ci[3], roc_therano$ci[3], roc_frontiers$ci[3], roc_all$ci[3])) %>% dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_errorbar(aes(x = dataset, ymin = conf_low, ymax = conf_high), width = 0.5, linewidth = 0.5, alpha = 1) +
+  geom_text(aes(label = AUC), nudge_y = -(b$AUC - b$conf_high - 0.07), color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+# create a confusion matrix
+preds <- ifelse(all_roc$pred < best_thr$threshold, 0, 1)
+all_roc$pred_class <- as.character(ifelse(c(pd_elife, pd_therano, pd_front) == "0", "HD", "LC"))
+all_roc$resp <- as.character(ifelse(all_roc$resp == 0, "HD", "LC"))
+save_roc <- all_roc
+all_roc <- all_roc %>%
+  dplyr::filter(dataset != "Total") %>%
+  droplevels()
+eval <- evaluate(all_roc,
+  target_col = "resp",
+  prediction_cols = "pred_class",
+  type = "binomial"
+)
+conf_mat <- eval$`Confusion Matrix`[[1]]
+p2b <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = font(size = 9, color = "black"), font_col_percentages = font(size = 5.5, color = "black"), font_row_percentages = font(size = 5.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+
+# combine the plots
+
+p1
+p2b
+
+# export the model and the determined best threshold
+save(elnet_npj, best_thr, file = "./data/deconv_logmodel.RData")
+
+# model performance per condition and dataset
+save_roc$pred_class <- ifelse(save_roc$pred_class == "HD", "0", "1")
+save_roc$resp <- ifelse(save_roc$resp == "HD", "0", "1")
+save_roc %>%
+  dplyr::filter(resp != pred_class) %>%
+  dplyr::count(dataset, resp)
+cfdeconv_log <- save_roc
+
+deconv_npj <- data.frame(resp = as.factor(c(npj_clean$cond)), pred_class = c(pd_npj), pred = aggregate(LC ~ rowIndex, elnet_npj_tune$pred, mean)[, "LC"]) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0))
+save(cfdeconv_log, deconv_npj, file = "./data/cfdeconv_res.RData")
+```
+
+# Integrated modeling
+
+```{r, int_model, fig.width= 15, fig.height=8, warning = FALSE}
+# load data
+load("./data/deconv_res_filt.RData")
+# data clenaup
+elife_clean <- elife_meta_deconv_filt %>%
+  dplyr::select(-c(samples)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+therano_clean <- therano_meta_deconv %>%
+  dplyr::select(-c(1:7)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+npj_clean <- npj_meta_deconv %>%
+  dplyr::select(c(cond, 29:39)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+frontiers_clean <- frontiers_meta_deconv %>%
+  dplyr::select(-c(1:48)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+
+# load the data needed tor gene marker analysis
+load("./data/cfinput_clean_filt.RData")
+gene_list <- c("FGB", "FGA", "CP", "C3", "IFITM3", "FGG", "ATP1B1", "HRG", "APOE", "DHCR24", "TF", "HRG", "CP", "FGA", "GOLGA6L1", "TERT", "SNORD3B-1")
+# npj dataset
+select_datac <- which((row.names(npj_batch)) %in% (gene_list))
+data_npj <- cbind(npj_meta, t(npj_batch[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  mutate(cond = factor(cond, levels = c("HD", "LC")))
+# elife
+select_datac <- which((row.names(elife_countm_filt)) %in% (gene_list))
+data_elife <- cbind(elife_meta_filt, t(elife_countm_filt[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+# therano
+select_datac <- which((row.names(therano_countm)) %in% (gene_list))
+data_therano <- cbind(therano_meta, t(therano_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+# frontiers
+select_datac <- which((row.names(frontiers_countm)) %in% (gene_list))
+data_frontiers <- cbind(frontiers_meta, t(frontiers_countm[select_datac, ])) %>%
+  dplyr::select(c(gene_list, cond)) %>%
+  dplyr::mutate(cond = factor(cond, levels = c("HD", "LC")))
+
+# rename the gene name for easier coding
+data_npj <- data_npj %>% dplyr::rename(SNORD3B_1 = `SNORD3B-1`)
+data_elife <- data_elife %>% dplyr::rename(SNORD3B_1 = `SNORD3B-1`)
+data_therano <- data_therano %>% dplyr::rename(SNORD3B_1 = `SNORD3B-1`)
+data_frontiers <- data_frontiers %>% dplyr::rename(SNORD3B_1 = `SNORD3B-1`)
+
+# merge the deconv results with gene marker expression data per dataset
+npj_merged <- cbind(data_npj, npj_clean[, -1]) %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+elife_merged <- cbind(data_elife, elife_clean[, -1]) %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+therano_merged <- cbind(data_therano, therano_clean[, -1]) %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+frontiers_merged <- cbind(data_frontiers, frontiers_clean[, -1]) %>% dplyr::rename(NK_like_Cells = `NK-like_Cells`)
+
+# optimal hyperparameters for an RF model
+set.seed(5)
+repeat_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 5, savePredictions = TRUE, summaryFunction = twoClassSummary, classProbs = TRUE)
+forest <- caret::train(cond ~ FGB + FGA + CP + C3 + IFITM3 + FGG + ATP1B1 + HRG + APOE + DHCR24 + TF + HRG + GOLGA6L1 + Hepatocyte + Portal_endothelial_Cells + Cholangiocytes + LSECs, data = npj_merged, method = "rf", trControl = repeat_cv, metric = "ROC", tuneLength = 10)
+# optimal tune
+forest$bestTune
+
+# train a RF model
+set.seed(5)
+model_train <- randomForest(cond ~ FGB + FGA + CP + C3 + IFITM3 + FGG + ATP1B1 + HRG + APOE + DHCR24 + TF + HRG + GOLGA6L1 + Hepatocyte + Portal_endothelial_Cells + Cholangiocytes + LSECs, data = npj_merged, mtry = as.numeric(forest$bestTune))
+rf_npj_roc <- roc(npj_merged$cond, model_train$votes[, 2], levels = c("HD", "LC"), direction = "<", plot = TRUE, print.auc = TRUE, ci = TRUE, print.thres = TRUE, main = "ROC plot calculated with RF votes - used also for optimal cut-off calculation")
+# optimal threshold
+best_thr <- coords(rf_npj_roc, "best", best.method = "youden", best.weights = c(1, 0.5))
+pred_npj <- ifelse(model_train$votes[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on elife
+pd_elife <- predict(model_train, elife_merged, type = "prob")
+roc_rf_elife <- roc(as.numeric(elife_merged$cond == "LC"), as.numeric(pd_elife[, 2]), plot = T, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_elife <- ifelse(pd_elife[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on therano
+pd_therano <- predict(model_train, therano_merged, type = "prob")
+roc_rf_therano <- roc(as.numeric(therano_merged$cond == "LC"), as.numeric(pd_therano[, 2]), plot = T, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_therano <- ifelse(pd_therano[, 2] < best_thr$threshold, "HD", "LC")
+
+# test on frontiers
+pd_front <- predict(model_train, frontiers_merged, type = "prob")
+roc_rf_front <- roc(as.numeric(frontiers_merged$cond == "LC"), as.numeric(pd_front[, 2]), plot = T, print.auc = TRUE, ci = TRUE, print.thres = TRUE, direction = "<", levels = c(0, 1))
+pred_front <- ifelse(pd_front[, 2] < best_thr$threshold, "HD", "LC")
+
+# aggregate the results
+all_roc <- data.frame(resp = as.factor(c(elife_merged$cond, therano_merged$cond, frontiers_merged$cond, c(elife_merged$cond, therano_merged$cond, frontiers_merged$cond))), pred = c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2], c(pd_elife[, 2], pd_therano[, 2], pd_front[, 2])), dataset = c(rep("Chen et al. (2022)", times = nrow(elife_merged)), rep("Zhu et al. (2021)", nrow(therano_merged)), rep("Block et al. (2022)", times = nrow(frontiers_merged)), c(rep("Total", times = nrow(elife_merged) + nrow(therano_merged) + nrow(frontiers_merged))))) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(dataset = factor(dataset, levels = c("Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+total_roc <- all_roc %>% dplyr::filter(dataset == "Total")
+roc_all <- roc(response = total_roc$resp, predictor = total_roc$pred, levels = c("0", "1"), direction = "<", plot = FALSE, print.auc = TRUE, ci = TRUE, print.thres = TRUE)
+# plot results
+cols <- c("Chen et al. (2022)" = "darkkhaki", "Zhu et al. (2021)" = "darkgoldenrod3", "Block et al. (2022)" = "darkmagenta", "Total" = "cornflowerblue")
+a <- ggplot(all_roc, aes(d = resp, m = pred, color = dataset)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 15), guide = guide_legend()) +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 20), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(dataset = calc_auc(a)$dataset, AUC = round((calc_auc(a))$AUC, 2), conf_low = c(roc_rf_elife$ci[1], roc_rf_therano$ci[1], roc_rf_front$ci[1], roc_all$ci[1]), conf_high = c(roc_rf_elife$ci[3], roc_rf_therano$ci[3], roc_rf_front$ci[3], roc_all$ci[3])) %>% dplyr::mutate(dataset = factor(dataset, levels = c("Roskams-Hieter et al. (2022)", "Chen et al. (2022)", "Zhu et al. (2021)", "Block et al. (2022)", "Total")))
+in_plot <- ggplot(b, aes(x = dataset, y = AUC, fill = dataset)) +
+  geom_col() +
+  geom_errorbar(aes(x = dataset, ymin = conf_low, ymax = conf_high), width = 0.5, linewidth = 0.5, alpha = 1) +
+  geom_text(aes(label = AUC), nudge_y = -(b$AUC - b$conf_high - 0.07), color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.0, ymin = -0.07, ymax = 0.55
+)
+preds <- ifelse(all_roc$pred < best_thr$threshold, 0, 1)
+all_roc$pred_class <- as.character(c(pred_elife, pred_therano, pred_front))
+all_roc$resp <- as.character(ifelse(all_roc$resp == 0, "HD", "LC"))
+save_roc <- all_roc
+all_roc <- all_roc %>%
+  dplyr::filter(dataset != "Total") %>%
+  droplevels()
+eval <- evaluate(all_roc,
+  target_col = "resp",
+  prediction_cols = "pred_class",
+  type = "binomial"
+)
+# confusion matrix construction
+conf_mat <- eval$`Confusion Matrix`[[1]]
+p2b <- plot_confusion_matrix(conf_mat, counts_on_top = T, add_normalized = F, class_order = c("HD", "LC"), font_counts = font(size = 9, color = "black"), font_col_percentages = font(size = 4.5, color = "black"), font_row_percentages = font(size = 4.5, color = "black"), arrow_size = 0.06, palette = "Blues", intensity_by = "counts", darkness = 0.5) + ggplot2::theme_minimal(base_size = 16, base_family = "Helvetica") + theme(plot.title = element_text(hjust = 0.5, vjust = 2.5, face = "bold"), plot.subtitle = element_text(hjust = 0.5, vjust = 2.5, face = "bold"))
+
+# assign new names to the plots
+int1 <- p1
+int2 <- p2b
+
+# modify for easier use later
+comb_rf <- all_roc %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(pred_class = ifelse(pred_class == "LC", 1, 0))
+
+# create dataset for the training phase results
+int_roc <- comb_rf
+int_npj <- data.frame(resp = as.factor(c(npj_merged$cond)), pred_class = c(pred_npj), pred = model_train$votes[, 2]) %>%
+  dplyr::mutate(resp = ifelse(resp == "LC", 1, 0)) %>%
+  dplyr::mutate(pred_class = ifelse(pred_class == "LC", 1, 0))
+save(int_npj, int_roc, file = "./data/int_res.RData")
+```
+
+# create comparison figures; Figure 4.9
+
+```{r, fig4_9, warning = FALSE, fig.width= 15, fig.height=8}
+# load marker data
+load("./data/marker_res.RData")
+# logistic model
+## filter out duplicates
+cfdeconv_log_filt <- cfdeconv_log %>% dplyr::filter(dataset != "Total")
+## get metrics
+merged_filt <- merged %>% dplyr::filter(dataset != "npj") # no npj as it will be part of the training phase
+# hepatocye proportion cut-off based classification results
+hepato_mat <- confusionMatrix(data = as.factor(as.numeric(merged$pred == "LC")), reference = as.factor(as.numeric(merged$cond == "LC")), positive = "1")
+cfdeconv_log_mat <- confusionMatrix(data = as.factor(cfdeconv_log_filt$pred_class), reference = as.factor(cfdeconv_log_filt$resp), positive = "1")
+# same steps for the 3 Random Forest gene marker models + the integrated model
+npj_mark_rf_filt <- npj_mark_rf %>% dplyr::filter(dataset != "Total")
+elife_mark_rf_filt <- elife_mark_rf %>% dplyr::filter(dataset != "Total")
+all_mark_rf_filt <- all_mark_rf %>% dplyr::filter(dataset != "Total")
+npj_mark_rf_mat <- confusionMatrix(data = as.factor(npj_mark_rf_filt$pred_class), reference = as.factor(npj_mark_rf_filt$resp), positive = "1")
+elife_mark_rf_mat <- confusionMatrix(data = as.factor(elife_mark_rf_filt$pred_class), reference = as.factor(elife_mark_rf_filt$resp), positive = "1")
+all_mark_rf_mat <- confusionMatrix(data = as.factor(all_mark_rf_filt$pred_class), reference = as.factor(all_mark_rf_filt$resp), positive = "1")
+comb_rf_mat <- confusionMatrix(data = as.factor(comb_rf$pred_class), reference = as.factor(comb_rf$resp), positive = "1")
+
+# calculate additional metrics (e.g., sensitivity)
+cfdeconv_log_epir <- epi.tests(cfdeconv_log_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+npj_mark_rf_epir <- epi.tests(npj_mark_rf_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+elife_mark_rf_epir <- epi.tests(elife_mark_rf_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+all_mark_rf_epir <- epi.tests(all_mark_rf_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+comb_rf_epir <- epi.tests(comb_rf_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+hepato_epir <- epi.tests(hepato_mat$table[c(4, 2, 3, 1)], method = "exact", digits = 2, conf.level = 0.95)
+
+## get the lower and upper bounds of the confidence interval for the metrics
+w0 <- data.frame(model = c("combined", "cfdeconv", "hepato", "npj_marker", "elife_marker", "all"), accuracy_low = c(comb_rf_mat$overall["AccuracyLower"], cfdeconv_log_mat$overall["AccuracyLower"], hepato_mat$overall["AccuracyLower"], npj_mark_rf_mat$overall["AccuracyLower"], elife_mark_rf_mat$overall["AccuracyLower"], all_mark_rf_mat$overall["AccuracyLower"]), accuracy_up = c(comb_rf_mat$overall["AccuracyUpper"], cfdeconv_log_mat$overall["AccuracyUpper"], hepato_mat$overall["AccuracyUpper"], npj_mark_rf_mat$overall["AccuracyUpper"], elife_mark_rf_mat$overall["AccuracyUpper"], all_mark_rf_mat$overall["AccuracyUpper"]), sense_low = c(comb_rf_epir$detail[3, 3], cfdeconv_log_epir$detail[3, 3], hepato_epir$detail[3, 3], npj_mark_rf_epir$detail[3, 3], elife_mark_rf_epir$detail[3, 3], all_mark_rf_epir$detail[3, 3]), sense_up = c(comb_rf_epir$detail[3, 4], cfdeconv_log_epir$detail[3, 4], hepato_epir$detail[3, 4], npj_mark_rf_epir$detail[3, 4], elife_mark_rf_epir$detail[3, 4], all_mark_rf_epir$detail[3, 4]), spec_low = c(comb_rf_epir$detail[4, 3], cfdeconv_log_epir$detail[4, 3], hepato_epir$detail[4, 3], npj_mark_rf_epir$detail[4, 3], elife_mark_rf_epir$detail[4, 3], all_mark_rf_epir$detail[4, 3]), spec_up = c(comb_rf_epir$detail[4, 4], cfdeconv_log_epir$detail[4, 4], hepato_epir$detail[4, 4], npj_mark_rf_epir$detail[4, 4], elife_mark_rf_epir$detail[4, 4], all_mark_rf_epir$detail[4, 4]))
+w0 <- w0 %>%
+  pivot_longer(
+    cols = -c(model),
+    names_to = c("metrics", "range"),
+    names_pattern = "(.+)_(low|up)"
+  ) %>%
+  pivot_wider(names_from = range, values_from = value)
+
+## get the metrics themselves
+w1 <- data.frame(model = c("combined", "cfdeconv", "hepato", "npj_marker", "elife_marker", "all"), accuracy = c(comb_rf_mat$overall["Accuracy"], cfdeconv_log_mat$overall["Accuracy"], hepato_mat$overall["Accuracy"], npj_mark_rf_mat$overall["Accuracy"], elife_mark_rf_mat$overall["Accuracy"], all_mark_rf_mat$overall["Accuracy"]), sense = c(comb_rf_mat$byClass["Sensitivity"], cfdeconv_log_mat$byClass["Sensitivity"], hepato_mat$byClass["Sensitivity"], npj_mark_rf_mat$byClass["Sensitivity"], elife_mark_rf_mat$byClass["Sensitivity"], all_mark_rf_mat$byClass["Sensitivity"]), spec = c(comb_rf_mat$byClass["Specificity"], cfdeconv_log_mat$byClass["Specificity"], hepato_mat$byClass["Specificity"], npj_mark_rf_mat$byClass["Specificity"], elife_mark_rf_mat$byClass["Specificity"], all_mark_rf_mat$byClass["Specificity"])) %>%
+  pivot_longer(names_to = "metrics", values_to = "values", cols = -c(model))
+merged_data <- merge(w1, w0, by = c("model", "metrics"))
+
+# aggregate the data and plot
+p1 <- merged_data %>%
+  dplyr::mutate(metrics = factor(metrics, levels = c("accuracy", "spec", "sense"))) %>%
+  dplyr::mutate(model = factor(model, levels = c("hepato", "cfdeconv", "elife_marker", "npj_marker", "all", "combined"))) %>%
+  ggplot(., aes(x = values, y = metrics, fill = model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(xmin = low, xmax = up, group = interaction(model, metrics)), position = "dodge") +
+  scale_x_continuous(expand = c(0, 0), breaks = breaks_extended(n = 8)) +
+  scale_y_discrete(labels = c("Accuracy", "Specificity", "Sensitivity"), expand = c(0, 0)) +
+  scale_fill_manual(labels = c("Hepatocyte proportion cut-off", "Targeted cellular deconvolution", "Markers from Chen et al. (2022)", "Markers from Roskams-Hieter et al. (2022)", paste0("Combined gene markers", "\n", "(Roskams-Hieter et al. markers + Chen et al. markers)"), paste0("Integrated model", "\n", "(Combined gene markers + Targeted cellular deconvolution)")), values = c("deepskyblue2", "deepskyblue4", "pink2", "pink3", "pink4", "khaki4")) +
+  guides(fill = guide_legend(byrow = TRUE, reverse = TRUE)) +
+  theme_pubclean(flip = TRUE, base_size = 18, base_family = "Helvetica") +
+  theme(legend.text = element_text(size = 16, family = "Helvetica"), legend.title = element_text(size = 18, family = "Helvetica"), legend.position = "right", legend.key.height = unit(2, "lines"), legend.spacing.y = unit(0.7, "cm"), plot.title = element_text(hjust = 0.5, face = "bold", size = 18), axis.title.y = element_blank(), axis.title.x = element_blank())
+
+int1
+int2
+p1
+```
+
+# create training phase figures; Figure 2.3
+
+```{r, train_figs, warning = FALSE, message = FALSE, fig.width= 15, fig.height=8}
+# aggregate the training phase results for all models
+all_npj <- rbind(npj_npj, elife_npj, comb_npj, deconv_npj, int_npj) %>%
+  dplyr::mutate(model = c(rep("Roskams-Hieter et al. gene markers", 58), rep("Chen et al. gene markers", 58), rep("Combined gene markers", 58), rep("Targeted cellular deconvolution", 58), rep("Integrated model", 58))) %>%
+  dplyr::mutate(model = factor(model, levels = c("Roskams-Hieter et al. gene markers", "Chen et al. gene markers", "Combined gene markers", "Targeted cellular deconvolution", "Integrated model")))
+# define the coloring scheme
+cols <- c("Roskams-Hieter et al. gene markers" = "pink2", "Chen et al. gene markers" = "pink3", "Combined gene markers" = "pink4", "Targeted cellular deconvolution" = "deepskyblue4", "Integrated model" = "khaki4")
+# plot
+a <- ggplot(all_npj, aes(d = resp, m = pred, color = model)) +
+  geom_roc(n.cuts = 0) +
+  style_roc() +
+  geom_abline() +
+  scale_color_manual(values = cols, labels = function(x) str_wrap(x, 30), guide = guide_legend()) +
+  theme_pubr(base_size = 16, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18), plot.subtitle = element_text(hjust = 0.5, face = "bold"), plot.caption = element_text(size = 12, hjust = 1, vjust = 0, face = "italic", color = "black")) +
+  guides(color = guide_legend(override.aes = list(linewidth = 10)))
+b <- data.frame(model = calc_auc(a)$model, AUC = round((calc_auc(a))$AUC, 2)) %>% dplyr::mutate(model = factor(model, levels = c("Roskams-Hieter et al. gene markers", "Chen et al. gene markers", "Combined gene markers", "Targeted cellular deconvolution", "Integrated model")))
+in_plot <- ggplot(b, aes(x = model, y = AUC, fill = model)) +
+  geom_col() +
+  geom_text(aes(label = AUC), nudge_y = 0.05, color = "black", size = 4.65) +
+  scale_fill_manual(values = cols) +
+  scale_x_discrete(labels = NULL, breaks = NULL) +
+  labs(x = "") +
+  ggtitle("AUC values of the ROC curves") +
+  theme_pubclean(base_size = 13, base_family = "Helvetica") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 13.5), axis.text.x = element_blank(), axis.title.x = element_blank(), plot.caption = NULL) +
+  guides(fill = "none")
+# combine plots
+p1 <- a + annotation_custom(
+  ggplotGrob(in_plot),
+  xmin = 0.55, xmax = 1.00, ymin = -0.07, ymax = 0.55
+)
+# export
+ggsave(plot = p1, file = "./figures/fig2_3.png", units = "mm", device = ragg::agg_png, height = 90, width = 170, scaling = 0.45, limitsize = FALSE, dpi = 300)
+```
+
+```{r}
+sessionInfo()
+```

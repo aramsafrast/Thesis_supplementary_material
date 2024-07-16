@@ -1,0 +1,248 @@
+---
+title: "Generation of main Figures 3.4, 3.5, 3.10 & 3.12 "
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r global_options, echo = F}
+knitr::opts_chunk$set(fig.path = "markdown_results/")
+```
+
+# load libraries
+***
+
+```{r libraries, message=F, warning=F}
+library(dplyr)
+library(cowplot)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(ReactomePA)
+library(org.Hs.eg.db)
+library(magick)
+library(clusterProfiler)
+library(ragg)
+library(AnnotationDbi)
+library(DOSE)
+library(ggtext)
+```
+
+# Generation of Figures 3.4 & 3.10
+***
+
+```{r 3_4_10, warning=F, message=F, fig.width= 25, fig.height=20, fig.align='center'}
+# load cfRNA WGCNA results
+load("./cfrna/results/wgcna_main/cfwgcna.RData")
+load("./cfrna/data/input/cfrna_input.RData")
+# get gene names and transform to ENTREZID
+module_genes <- data.frame(module = cfmergedcolors, gene = colnames(cfrna_wgcna_input))
+module_genes_entrez <- AnnotationDbi::select(org.Hs.eg.db,
+  keys = module_genes$gene,
+  keytype = "SYMBOL",
+  columns = c("SYMBOL", "ENTREZID")
+) %>% dplyr::left_join(module_genes, by = c("SYMBOL" = "gene"))
+# Reactome pathway enrichment analysis and visualization of module cf-turquoise
+turq_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "cf-turquoise") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+turq_reactome <- enrichPathway(gene = turq_genes$ENTREZID)
+# define fold enrichment
+turq_reactome <- mutate(turq_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+# get the 10 most significantly enriched pathways
+turq_reactome_df <- fortify(turq_reactome, showCategory = 10)
+# transform the p values to a -log10 scale
+turq_reactome_df$p.adjust <- -log10(as.numeric(turq_reactome_df$p.adjust))
+# plot
+turq_reactome_plot <- ggplot(turq_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(6, 10), breaks = scales::pretty_breaks(n = 3)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 23, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 24, face = "bold", hjust = 0.5)) +
+  ggtitle("cfRNA module cf-turquoise")
+# same steps for the module cf-blue
+blue_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "cf-blue") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+blue_reactome <- enrichPathway(gene = blue_genes$ENTREZID)
+blue_reactome <- mutate(blue_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+blue_reactome_df <- fortify(blue_reactome, showCategory = 10)
+blue_reactome_df$p.adjust <- -log10(as.numeric(blue_reactome_df$p.adjust))
+blue_reactome_plot <- ggplot(blue_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(6, 10), breaks = scales::pretty_breaks(n = 3)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 23, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 24, face = "bold", hjust = 0.5)) +
+  ggtitle("cfRNA module cf-blue")
+blue_reactome_plot
+turq_reactome_plot
+
+
+# same steps for the module cf-purple
+purple_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "cf-purple") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+purple_reactome <- enrichPathway(gene = purple_genes$ENTREZID)
+purple_reactome <- mutate(purple_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+purple_reactome_df <- fortify(purple_reactome, showCategory = 10)
+purple_reactome_df$p.adjust <- round(-log10(as.numeric(purple_reactome_df$p.adjust)), digits = 1)
+purple_reactome_plot_old <- enrichplot::cnetplot(purple_reactome, color_category = "purple", color_gene = "purple", cex_label_category = 1, cex_label_gene = 1, showCategory = 5) + theme_void(base_size = 24) + labs(title = "Reactome pathway enrichment analysis", subtitle = "<span style = 'color: red;'>cf-purple</span>") + theme(text = element_text(family = "Arial"), plot.margin = unit(c(0, 0, 0, 0), "cm"), plot.subtitle = element_markdown(size = 25, face = "bold", hjust = 0.5), plot.title = element_text(color = "black", size = 26, face = "bold", hjust = 0.5)) + guides(size = guide_legend(reverse = T))
+purple_reactome_plot <- ggplot(purple_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(5, 12), breaks = scales::pretty_breaks(n = 3)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 21, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 22, face = "bold", hjust = 0.5)) +
+  ggtitle("cfRNA module cf-purple")
+
+# same steps for the module cf-yellow
+yellow_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "cf-yellow") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+yellow_reactome <- enrichPathway(gene = yellow_genes$ENTREZID)
+yellow_reactome <- mutate(yellow_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+yellow_reactome_df <- fortify(yellow_reactome, showCategory = 10)
+yellow_reactome_df$p.adjust <- round(-log10(as.numeric(yellow_reactome_df$p.adjust)), digits = 1)
+yellow_reactome_plot_old <- enrichplot::cnetplot(yellow_reactome, color_category = "yellow", color_gene = "yellow", cex_label_category = 1, cex_label_gene = 1, showCategory = 5) + theme_void(base_size = 24) +
+  labs(title = "Reactome pathway enrichment analysis", subtitle = "<span style = 'color: red;'>cf-yellow</span>") + theme(text = element_text(family = "Arial"), plot.margin = unit(c(0, 0, 0, 0), "cm"), plot.subtitle = element_markdown(size = 25, face = "bold", hjust = 0.5), plot.title = element_text(color = "black", size = 26, face = "bold", hjust = 0.5)) + guides(size = guide_legend(reverse = T))
+yellow_reactome_plot <- ggplot(yellow_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(5, 12), breaks = scales::pretty_breaks(n = 3)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 21, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 22, face = "bold", hjust = 0.5)) +
+  ggtitle("cfRNA module cf-yellow")
+purple_reactome_plot
+yellow_reactome_plot
+```
+
+# Generation of Figures 3.5 & 3.12
+***
+
+```{r 3_5_12, warning=F, message=F, fig.width= 25, fig.height=20, fig.align='center'}
+# load exoRNA WGCNA results
+load("./exorna/results/wgcna_main/exowgcna.RData")
+load("./exorna/data/input/exorna_input.RData")
+# get gene names and transfer to ENTREZID
+module_genes <- data.frame(module = exomergedcolors, gene = colnames(exorna_wgcna_input))
+module_genes_entrez <- AnnotationDbi::select(org.Hs.eg.db,
+  keys = module_genes$gene,
+  keytype = "SYMBOL",
+  columns = c("SYMBOL", "ENTREZID")
+) %>% dplyr::left_join(module_genes, by = c("SYMBOL" = "gene"))
+brown_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "exo-brown") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+# generate enrichment plots for module exo-brown
+brown_reactome <- enrichPathway(gene = brown_genes$ENTREZID)
+# define fold enrichment
+brown_reactome <- mutate(brown_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+# get the 10 most significantly enriched pathways
+brown_reactome_df <- fortify(brown_reactome, showCategory = 10)
+# transform the p values to -log10 scale
+brown_reactome_df$p.adjust <- -log10(as.numeric(brown_reactome_df$p.adjust))
+# plot
+brown_reactome_plot <- ggplot(brown_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(7, 10), breaks = scales::pretty_breaks(n = 1)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 23, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 24, face = "bold", hjust = 0.5)) +
+  ggtitle("exoRNA module exo-brown")
+
+turquoise_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "exo-turquoise") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+# generate enrichment plots for module exo-turquoise
+turquoise_reactome <- enrichPathway(gene = turquoise_genes$ENTREZID)
+turquoise_reactome <- mutate(turquoise_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+turquoise_reactome_df <- fortify(turquoise_reactome, showCategory = 10)
+turquoise_reactome_df$p.adjust <- -log10(as.numeric(turquoise_reactome_df$p.adjust))
+turquoise_reactome_plot <- ggplot(turquoise_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(7, 10), breaks = scales::pretty_breaks(n = 1)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 23, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 24, face = "bold", hjust = 0.5)) +
+  ggtitle("exoRNA module exo-turquoise")
+brown_reactome_plot
+turquoise_reactome_plot
+
+# same steps for the module exo-green
+green_genes <- module_genes_entrez %>%
+  dplyr::filter(module == "exo-green") %>%
+  na.omit() %>%
+  dplyr::select(ENTREZID) %>%
+  unique()
+# generate enrichment plots for module exo-green
+green_reactome <- enrichPathway(gene = green_genes$ENTREZID)
+green_reactome <- mutate(green_reactome, FoldEnrichment = parse_ratio(GeneRatio) / parse_ratio(BgRatio))
+green_reactome_df <- fortify(green_reactome, showCategory = 10)
+green_reactome_df$p.adjust <- -log10(as.numeric(green_reactome_df$p.adjust))
+green_reactome_plot <- ggplot(green_reactome_df, aes(x = FoldEnrichment, y = fct_reorder(Description, FoldEnrichment))) +
+  geom_point(aes(size = Count, color = p.adjust)) +
+  guides(size = guide_legend(reverse = T, order = 1), colour = guide_colorbar(order = 2, title.vjust = 1.5, barheight = 8)) +
+  scale_size_continuous(name = "Count", range = c(7, 10), breaks = scales::pretty_breaks(n = 1)) +
+  scale_x_continuous(name = "Fold Enrichment", breaks = scales::extended_breaks(n = 5)) +
+  scale_colour_gradient(name = expression("−" * log[10](italic(p)["adjusted"])), low = "skyblue", high = "darkred", breaks = scales::breaks_extended(n = 5)) +
+  ylab(NULL) +
+  scale_y_discrete(labels = function(x) stringr::str_wrap(x, width = 30)) +
+  theme_bw(base_size = 23, base_family = "Arial", base_rect_size = 1, base_line_size = 1) +
+  theme(plot.title = element_text(color = "black", size = 24, face = "bold", hjust = 0.5)) +
+  ggtitle("exoRNA module exo-green")
+ggsave(plot = green_reactome_plot, file = "./figures/fig3_12.png", units = "mm", device = ragg::agg_png, height = 200, width = 350, scaling = 1)
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,175 @@
+---
+title: "Generation of main Figure 3.8" 
+author: "Aram Safrastyan"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: TRUE
+    code_folding: hide
+    number_sections: TRUE
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r global_options, echo = F}
+knitr::opts_chunk$set(fig.path = "markdown_results/")
+```
+
+# load libraries
+***
+
+```{r libraries, message=F, warning=F}
+library(forcats)
+library(dplyr)
+library(WGCNA)
+library(cowplot)
+library(ggplot2)
+library(RColorBrewer)
+library(tibble)
+library(ggrepel)
+library(tidyr)
+library(stringr)
+library(cowplot)
+library(ggpubr)
+```
+
+# Module presevation calculation (cfRNA modules => exoRNA data)
+## warning - resource intensive! 
+***
+
+```{r cfmp, warning=F, message=F, fig.width= 8, fig.height=5, fig.align='center'}
+# enable multithreading
+enableWGCNAThreads(nThreads = snakemake@threads)
+# load data
+load("./cfrna/results/wgcna_main/cfwgcna.RData")
+load("./exorna/results/wgcna_main/exowgcna.RData")
+# define the input datasets and the reference module list
+setLabels <- c("cfRNA", "exoRNA")
+multiExpr <- list(cfRNA = list(data = cfrna_wgcna_input), exoRNA = list(data = exorna_wgcna_input))
+multiColor <- list(cfRNA = cfmergedcolors)
+# perform module preservation analysis
+mp_cf_exo <- modulePreservation(multiExpr, multiColor, referenceNetworks = 1, nPermutations = 100, randomSeed = 1, quickCor = 0, maxModuleSize = 5000, maxGoldModuleSize = 5000, parallelCalculation = T)
+
+# plotting the results
+# get Zpres and Zqual statistics
+ref <- 1
+test <- 2
+modColors <- rownames(mp_cf_exo$preservation$observed[[ref]][[test]])
+moduleSizes <- mp_cf_exo$preservation$Z[[ref]][[test]][, 1]
+plotData <- cbind(mp_cf_exo$preservation$observed[[ref]][[test]][, 2], mp_cf_exo$preservation$Z[[ref]][[test]][, 2])
+moduleQual <- mp_cf_exo$quality$Z[[ref]][[test]][, 2]
+# aggregate the data into a dataframe
+df <- as.data.frame(plotData)
+df$mod <- modColors
+df <- df[, 2:3]
+df$qual <- moduleQual
+df$size <- moduleSizes
+# leave the uninformative grey and gold modules out
+df_input <- df %>%
+  filter(!mod %in% c("gold", "grey")) %>%
+  mutate(col = str_remove(mod, "cf-"))
+df_input$col[8] <- "yellow"
+# create the background for the plot
+rects <- data.frame(xstart = c(0, 2, 10), xend = c(2, 10, 100), col = letters[1:3])
+rects1 <- data.frame(ystart = c(0, 2, 10), yend = c(2, 10, 100), col = letters[1:3])
+# plot
+fig1 <- ggplot() +
+  geom_rect(data = rects, aes(xmin = xstart, xmax = xend, ymin = 0, ymax = 100, fill = col), alpha = 0.08) +
+  geom_rect(data = rects1, aes(xmin = 0, xmax = 100, ymin = ystart, ymax = yend, fill = col), alpha = 0.08) +
+  scale_fill_manual(values = c("grey", "lightgreen", "green")) +
+  geom_point(data = df_input, aes(x = V2, y = qual, colour = col), size = 5, alpha = 1) +
+  geom_vline(xintercept = 2, colour = "grey", size = 1.1) +
+  geom_vline(xintercept = 10, colour = "green", size = 1.1) +
+  geom_hline(yintercept = 2, colour = "grey", size = 1.1) +
+  geom_hline(yintercept = 10, colour = "green", size = 1.1) +
+  scale_colour_identity() +
+  geom_label_repel(
+    data = df_input,
+    aes(x = V2, y = qual, label = mod),
+    box.padding = 0.5,
+    point.padding = 0.5,
+    segment.color = "black",
+    max.overlaps = Inf,
+    size = 2,
+    segment.size = 0.5, force = 50
+  ) +
+  scale_x_continuous(trans = "pseudo_log", expand = c(0, 0), breaks = c(0, 2, 10, 30, 70)) +
+  scale_y_continuous(trans = "pseudo_log", expand = c(0, 0), breaks = c(0, 2, 10, 30, 70)) +
+  labs(x = expression("Module preservation " * (Z[italic(sum)])), y = expression("Module quality " * (Z[italic(qual)])), title = "cfRNA modules in exoRNA dataset") +
+  theme_pubr(base_size = 10, base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), plot.title = element_text(color = "black", size = 10, face = "bold", hjust = 0.5), plot.subtitle = element_text(color = "black", size = 8, face = "bold", hjust = 0.5), legend.position = "none")
+fig1
+```
+
+# Module presevation calculation (exoRNA modules => cfRNA data)
+## warning resource intensive!
+***
+
+```{r exomp, warning=F, message=F, fig.width= 8, fig.height=5, fig.align='center'}
+# same steps in reverse
+# define the input datasets and the reference module list
+setLabels <- c("exoRNA", "cfRNA")
+multiExpr <- list(exoRNA = list(data = exorna_wgcna_input), cfRNA = list(data = cfrna_wgcna_input))
+multiColor <- list(exoRNA = exomergedcolors)
+# perform module preservation analysis
+mp_exo_cf <- modulePreservation(multiExpr, multiColor, referenceNetworks = 1, nPermutations = 100, randomSeed = 1, quickCor = 0, maxModuleSize = 5500, maxGoldModuleSize = 5500, parallelCalculation = T)
+
+# plotting the results
+# get Zpres and Zqual statistics
+ref <- 1
+test <- 2
+modColors <- rownames(mp_exo_cf$preservation$observed[[ref]][[test]])
+moduleSizes <- mp_exo_cf$preservation$Z[[ref]][[test]][, 1]
+moduleQual <- mp_exo_cf$quality$Z[[ref]][[test]][, 2]
+plotData <- cbind(mp_exo_cf$preservation$observed[[ref]][[test]][, 2], mp_exo_cf$preservation$Z[[ref]][[test]][, 2])
+# aggregate the data into a dataframe
+df <- as.data.frame(plotData)
+df$mod <- modColors
+df <- df[, 2:3]
+df$size <- moduleSizes
+df$qual <- moduleQual
+# leave the uninformative grey and gold modules out
+df_input <- df %>%
+  filter(!mod %in% c("gold", "grey")) %>%
+  mutate(col = str_remove(mod, "exo-"))
+# define the figure backgrounds
+rects <- data.frame(xstart = c(0, 2, 10), xend = c(2, 10, 100), col = letters[1:3])
+rects1 <- data.frame(ystart = c(0, 2, 10), yend = c(2, 10, 100), col = letters[1:3])
+# plot
+fig2 <- ggplot() +
+  geom_rect(data = rects, aes(xmin = xstart, xmax = xend, ymin = 0, ymax = 100, fill = col), alpha = 0.08) +
+  geom_rect(data = rects1, aes(xmin = 0, xmax = 100, ymin = ystart, ymax = yend, fill = col), alpha = 0.08) +
+  scale_fill_manual(values = c("grey", "lightgreen", "green")) +
+  geom_point(data = df_input, aes(x = V2, y = qual, colour = col), size = 5, alpha = 1) +
+  geom_vline(xintercept = 2, colour = "grey", size = 1.1) +
+  geom_vline(xintercept = 10, colour = "green", size = 1.1) +
+  geom_hline(yintercept = 2, colour = "grey", size = 1.1) +
+  geom_hline(yintercept = 10, colour = "green", size = 1.1) +
+  scale_colour_identity() +
+  geom_label_repel(
+    data = df_input,
+    aes(x = V2, y = qual, label = mod),
+    box.padding = 0.5,
+    point.padding = 0.5,
+    segment.color = "black",
+    max.overlaps = Inf,
+    size = 2,
+    segment.size = 0.5, force = 50
+  ) +
+  scale_x_continuous(trans = "pseudo_log", expand = c(0, 0), breaks = c(0, 2, 10, 30, 70)) +
+  scale_y_continuous(trans = "pseudo_log", expand = c(0, 0), breaks = c(0, 2, 10, 30, 70)) +
+  labs(x = expression("Module preservation " * (Z[italic(sum)])), y = expression("Module quality " * (Z[italic(qual)])), title = "exoRNA modules in cfRNA dataset") +
+  theme_pubr(base_size = 10, base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), plot.title = element_text(color = "black", size = 10, face = "bold", hjust = 0.5), plot.subtitle = element_text(color = "black", size = 8, face = "bold", hjust = 0.5), legend.position = "none")
+fig2
+```
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,30 @@
+rule all:
+	"""
+	Main outputs of the workflow
+        """
+	input:
+                "cell_interactions_fig5_4_supplfile_9.html"
+
+rule lri_detection:
+        output:
+                "lri_detection_fig5_1_suppl_fil7.html"
+        threads: workflow.cores
+        script:
+                "lri_detection_fig5_1_suppl_fil7.Rmd"
+
+rule panel:
+        input:
+                "lri_detection_fig5_1_suppl_fil7.html"
+        output:
+                "panel_figs5_2_3_supplfile8.html"
+        script:
+                "panel_figs5_2_3_supplfile8.Rmd"
+
+rule cell_interactions:
+        input:
+                "panel_figs5_2_3_supplfile8.html"
+        output:
+                "cell_interactions_fig5_4_supplfile_9.html"
+        script:
+                "cell_interactions_fig5_4_supplfile_9.Rmd"
+

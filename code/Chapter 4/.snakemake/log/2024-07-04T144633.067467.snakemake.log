@@ -1,0 +1,39 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 15
+Rules claiming more threads will be scaled down.
+Job stats:
+job                count
+---------------  -------
+all                    1
+bio_insights           1
+conf_factors           1
+deconv_analysis        1
+gene_markers           1
+suppl_files            1
+total                  6
+
+Select jobs to execute...
+
+[Thu Jul  4 14:46:35 2024]
+rule gene_markers:
+    input: bisque_deconv_suppl_file4.html
+    output: ext_markers_fig4_8.html
+    jobid: 3
+    reason: Missing output files: ext_markers_fig4_8.html
+    resources: tmpdir=/tmp
+
+[Thu Jul  4 14:48:01 2024]
+Error in rule gene_markers:
+    jobid: 3
+    input: bisque_deconv_suppl_file4.html
+    output: ext_markers_fig4_8.html
+
+RuleException:
+CalledProcessError in file /data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline, line 30:
+Command 'set -euo pipefail;  Rscript --vanilla -e 'rmarkdown::render("/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmp9tue1_mo.ext_markers_fig4_8.Rmd", output_file="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/ext_markers_fig4_8.html", quiet=TRUE, knit_root_dir = "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4", params = list(rmd="/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/.snakemake/scripts/tmp9tue1_mo.ext_markers_fig4_8.Rmd"))'' returned non-zero exit status 1.
+  File "/data/fass5/projects/aram/current_projects/phd_tests/Chapter 4/snakemake_pipeline", line 30, in __rule_gene_markers
+  File "/home/si48met/miniconda3/envs/cfdeconv_lc/lib/python3.10/concurrent/futures/thread.py", line 58, in run
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2024-07-04T144633.067467.snakemake.log
