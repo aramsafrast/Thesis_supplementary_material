@@ -1,9 +1,9 @@
 # WGCNA analysis of cfRNA and exoRNA data from liver cancer patients and healthy donors
 
 _____________________________________________
-
+<p align="center">
 <img src="dag.png" align="center" />
-
+</p>
 _____________________________________________
 
 This code is aimed at reproducing the results of Chapter 3. 

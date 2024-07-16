@@ -1,9 +1,9 @@
 # Cell-free deconvolution analysis of liver cancer patient and healthy donor blood
 
 _____________________________________________
-
+<p align="center">
 <img src="dag.png" align="center" />
-
+</p>
 _____________________________________________
 
 This code is aimed at reproducing the results of Chapter 4. 

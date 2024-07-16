@@ -1,9 +1,9 @@
 # Analaysis of ligand-receptor interactions from the blood of liver cancer patients and healthy donors
 
 _____________________________________________
-
+<p align="center">
 <img src="dag.png" align="center" />
-
+</p>
 _____________________________________________
 
 This code is aimed at reproducing the results of Chapter 5. 
