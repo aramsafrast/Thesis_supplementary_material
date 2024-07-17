@@ -6,7 +6,7 @@ _____________________________________________
 
 _____________________________________________
 
-This repository contains the suplementary files and the code used to produce the results of the thesis titled "Computational Methods in Cell-Free RNA-Sequencing for Liver Cancer Profiling and Diagnosis" by Aram Safrastyan. 
+This repository contains the suplementary files and the code used to produce the results of the thesis titled "" by Aram Safrastyan. 
 
 ## The work has been adapted from the following publications/preprint:
 
