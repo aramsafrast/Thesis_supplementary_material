@@ -12,7 +12,7 @@ This repository contains the suplementary files and the code used to produce the
 
 ### Chapter 3
 
-Safrastyan A and Wollny D (2022) Network analysis of hepatocellular carcinoma liquid biopsies augmented by single-cell sequencing data. Front. Genet. 13:921195. doi: 10.3389/fgene.2022.921195
+Safrastyan A and Wollny D (2022) Network analysis of hepatocellular carcinoma liquid biopsies augmented by single-cell sequencing data. Front. Genet. 13:921195. doi: https://doi.org/10.3389/fgene.2022.921195
 
 ### Chapter 4
 
